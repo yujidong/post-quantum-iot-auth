@@ -1,0 +1,336 @@
+=== Fog Simulation Configuration ===
+Scheme: FALCON
+Placement: fog
+IoT Devices: 200
+Edge Gateways: 40
+Relays: 10
+Simulation Time: 1000.0s
+=====================================
+Creating onchain_verifier on device cloud
+Creating auth_decision on device cloud
+Creating did_resolver on device proxy-server_0
+Creating sig_verifier on device d-0
+Creating crypto_signer on device m-0-0
+Creating crypto_signer on device m-0-1
+Creating crypto_signer on device m-0-2
+Creating crypto_signer on device m-0-3
+Creating crypto_signer on device m-0-4
+Creating sig_verifier on device d-1
+Creating crypto_signer on device m-1-0
+Creating crypto_signer on device m-1-1
+Creating crypto_signer on device m-1-2
+Creating crypto_signer on device m-1-3
+Creating crypto_signer on device m-1-4
+Creating sig_verifier on device d-2
+Creating crypto_signer on device m-2-0
+Creating crypto_signer on device m-2-1
+Creating crypto_signer on device m-2-2
+Creating crypto_signer on device m-2-3
+Creating crypto_signer on device m-2-4
+Creating sig_verifier on device d-3
+Creating crypto_signer on device m-3-0
+Creating crypto_signer on device m-3-1
+Creating crypto_signer on device m-3-2
+Creating crypto_signer on device m-3-3
+Creating crypto_signer on device m-3-4
+Creating did_resolver on device proxy-server_1
+Creating sig_verifier on device d-4
+Creating crypto_signer on device m-4-0
+Creating crypto_signer on device m-4-1
+Creating crypto_signer on device m-4-2
+Creating crypto_signer on device m-4-3
+Creating crypto_signer on device m-4-4
+Creating sig_verifier on device d-5
+Creating crypto_signer on device m-5-0
+Creating crypto_signer on device m-5-1
+Creating crypto_signer on device m-5-2
+Creating crypto_signer on device m-5-3
+Creating crypto_signer on device m-5-4
+Creating sig_verifier on device d-6
+Creating crypto_signer on device m-6-0
+Creating crypto_signer on device m-6-1
+Creating crypto_signer on device m-6-2
+Creating crypto_signer on device m-6-3
+Creating crypto_signer on device m-6-4
+Creating sig_verifier on device d-7
+Creating crypto_signer on device m-7-0
+Creating crypto_signer on device m-7-1
+Creating crypto_signer on device m-7-2
+Creating crypto_signer on device m-7-3
+Creating crypto_signer on device m-7-4
+Creating did_resolver on device proxy-server_2
+Creating sig_verifier on device d-8
+Creating crypto_signer on device m-8-0
+Creating crypto_signer on device m-8-1
+Creating crypto_signer on device m-8-2
+Creating crypto_signer on device m-8-3
+Creating crypto_signer on device m-8-4
+Creating sig_verifier on device d-9
+Creating crypto_signer on device m-9-0
+Creating crypto_signer on device m-9-1
+Creating crypto_signer on device m-9-2
+Creating crypto_signer on device m-9-3
+Creating crypto_signer on device m-9-4
+Creating sig_verifier on device d-10
+Creating crypto_signer on device m-10-0
+Creating crypto_signer on device m-10-1
+Creating crypto_signer on device m-10-2
+Creating crypto_signer on device m-10-3
+Creating crypto_signer on device m-10-4
+Creating sig_verifier on device d-11
+Creating crypto_signer on device m-11-0
+Creating crypto_signer on device m-11-1
+Creating crypto_signer on device m-11-2
+Creating crypto_signer on device m-11-3
+Creating crypto_signer on device m-11-4
+Creating did_resolver on device proxy-server_3
+Creating sig_verifier on device d-12
+Creating crypto_signer on device m-12-0
+Creating crypto_signer on device m-12-1
+Creating crypto_signer on device m-12-2
+Creating crypto_signer on device m-12-3
+Creating crypto_signer on device m-12-4
+Creating sig_verifier on device d-13
+Creating crypto_signer on device m-13-0
+Creating crypto_signer on device m-13-1
+Creating crypto_signer on device m-13-2
+Creating crypto_signer on device m-13-3
+Creating crypto_signer on device m-13-4
+Creating sig_verifier on device d-14
+Creating crypto_signer on device m-14-0
+Creating crypto_signer on device m-14-1
+Creating crypto_signer on device m-14-2
+Creating crypto_signer on device m-14-3
+Creating crypto_signer on device m-14-4
+Creating sig_verifier on device d-15
+Creating crypto_signer on device m-15-0
+Creating crypto_signer on device m-15-1
+Creating crypto_signer on device m-15-2
+Creating crypto_signer on device m-15-3
+Creating crypto_signer on device m-15-4
+Creating did_resolver on device proxy-server_4
+Creating sig_verifier on device d-16
+Creating crypto_signer on device m-16-0
+Creating crypto_signer on device m-16-1
+Creating crypto_signer on device m-16-2
+Creating crypto_signer on device m-16-3
+Creating crypto_signer on device m-16-4
+Creating sig_verifier on device d-17
+Creating crypto_signer on device m-17-0
+Creating crypto_signer on device m-17-1
+Creating crypto_signer on device m-17-2
+Creating crypto_signer on device m-17-3
+Creating crypto_signer on device m-17-4
+Creating sig_verifier on device d-18
+Creating crypto_signer on device m-18-0
+Creating crypto_signer on device m-18-1
+Creating crypto_signer on device m-18-2
+Creating crypto_signer on device m-18-3
+Creating crypto_signer on device m-18-4
+Creating sig_verifier on device d-19
+Creating crypto_signer on device m-19-0
+Creating crypto_signer on device m-19-1
+Creating crypto_signer on device m-19-2
+Creating crypto_signer on device m-19-3
+Creating crypto_signer on device m-19-4
+Creating did_resolver on device proxy-server_5
+Creating sig_verifier on device d-20
+Creating crypto_signer on device m-20-0
+Creating crypto_signer on device m-20-1
+Creating crypto_signer on device m-20-2
+Creating crypto_signer on device m-20-3
+Creating crypto_signer on device m-20-4
+Creating sig_verifier on device d-21
+Creating crypto_signer on device m-21-0
+Creating crypto_signer on device m-21-1
+Creating crypto_signer on device m-21-2
+Creating crypto_signer on device m-21-3
+Creating crypto_signer on device m-21-4
+Creating sig_verifier on device d-22
+Creating crypto_signer on device m-22-0
+Creating crypto_signer on device m-22-1
+Creating crypto_signer on device m-22-2
+Creating crypto_signer on device m-22-3
+Creating crypto_signer on device m-22-4
+Creating sig_verifier on device d-23
+Creating crypto_signer on device m-23-0
+Creating crypto_signer on device m-23-1
+Creating crypto_signer on device m-23-2
+Creating crypto_signer on device m-23-3
+Creating crypto_signer on device m-23-4
+Creating did_resolver on device proxy-server_6
+Creating sig_verifier on device d-24
+Creating crypto_signer on device m-24-0
+Creating crypto_signer on device m-24-1
+Creating crypto_signer on device m-24-2
+Creating crypto_signer on device m-24-3
+Creating crypto_signer on device m-24-4
+Creating sig_verifier on device d-25
+Creating crypto_signer on device m-25-0
+Creating crypto_signer on device m-25-1
+Creating crypto_signer on device m-25-2
+Creating crypto_signer on device m-25-3
+Creating crypto_signer on device m-25-4
+Creating sig_verifier on device d-26
+Creating crypto_signer on device m-26-0
+Creating crypto_signer on device m-26-1
+Creating crypto_signer on device m-26-2
+Creating crypto_signer on device m-26-3
+Creating crypto_signer on device m-26-4
+Creating sig_verifier on device d-27
+Creating crypto_signer on device m-27-0
+Creating crypto_signer on device m-27-1
+Creating crypto_signer on device m-27-2
+Creating crypto_signer on device m-27-3
+Creating crypto_signer on device m-27-4
+Creating did_resolver on device proxy-server_7
+Creating sig_verifier on device d-28
+Creating crypto_signer on device m-28-0
+Creating crypto_signer on device m-28-1
+Creating crypto_signer on device m-28-2
+Creating crypto_signer on device m-28-3
+Creating crypto_signer on device m-28-4
+Creating sig_verifier on device d-29
+Creating crypto_signer on device m-29-0
+Creating crypto_signer on device m-29-1
+Creating crypto_signer on device m-29-2
+Creating crypto_signer on device m-29-3
+Creating crypto_signer on device m-29-4
+Creating sig_verifier on device d-30
+Creating crypto_signer on device m-30-0
+Creating crypto_signer on device m-30-1
+Creating crypto_signer on device m-30-2
+Creating crypto_signer on device m-30-3
+Creating crypto_signer on device m-30-4
+Creating sig_verifier on device d-31
+Creating crypto_signer on device m-31-0
+Creating crypto_signer on device m-31-1
+Creating crypto_signer on device m-31-2
+Creating crypto_signer on device m-31-3
+Creating crypto_signer on device m-31-4
+Creating did_resolver on device proxy-server_8
+Creating sig_verifier on device d-32
+Creating crypto_signer on device m-32-0
+Creating crypto_signer on device m-32-1
+Creating crypto_signer on device m-32-2
+Creating crypto_signer on device m-32-3
+Creating crypto_signer on device m-32-4
+Creating sig_verifier on device d-33
+Creating crypto_signer on device m-33-0
+Creating crypto_signer on device m-33-1
+Creating crypto_signer on device m-33-2
+Creating crypto_signer on device m-33-3
+Creating crypto_signer on device m-33-4
+Creating sig_verifier on device d-34
+Creating crypto_signer on device m-34-0
+Creating crypto_signer on device m-34-1
+Creating crypto_signer on device m-34-2
+Creating crypto_signer on device m-34-3
+Creating crypto_signer on device m-34-4
+Creating sig_verifier on device d-35
+Creating crypto_signer on device m-35-0
+Creating crypto_signer on device m-35-1
+Creating crypto_signer on device m-35-2
+Creating crypto_signer on device m-35-3
+Creating crypto_signer on device m-35-4
+Creating did_resolver on device proxy-server_9
+Creating sig_verifier on device d-36
+Creating crypto_signer on device m-36-0
+Creating crypto_signer on device m-36-1
+Creating crypto_signer on device m-36-2
+Creating crypto_signer on device m-36-3
+Creating crypto_signer on device m-36-4
+Creating sig_verifier on device d-37
+Creating crypto_signer on device m-37-0
+Creating crypto_signer on device m-37-1
+Creating crypto_signer on device m-37-2
+Creating crypto_signer on device m-37-3
+Creating crypto_signer on device m-37-4
+Creating sig_verifier on device d-38
+Creating crypto_signer on device m-38-0
+Creating crypto_signer on device m-38-1
+Creating crypto_signer on device m-38-2
+Creating crypto_signer on device m-38-3
+Creating crypto_signer on device m-38-4
+Creating sig_verifier on device d-39
+Creating crypto_signer on device m-39-0
+Creating crypto_signer on device m-39-1
+Creating crypto_signer on device m-39-2
+Creating crypto_signer on device m-39-3
+Creating crypto_signer on device m-39-4
+0.0 Submitted application falcon_auth
+
+=== RESULTS_JSON_START ===
+{
+  "scheme": "falcon",
+  "placement": "fog",
+  "num_iot": 200,
+  "num_gateways": 40,
+  "num_relays": 10,
+  "sim_time_s": 1000.0,
+  "energy": {
+    "iot_total_Ws": 96390.96,
+    "iot_avg_Ws": 481.9548,
+    "edge_total_Ws": 262587.32,
+    "edge_avg_Ws": 6564.68,
+    "relay_total_Ws": 263555.20,
+    "cloud_Ws": 217602.49,
+    "total_Ws": 840135.97
+  },
+  "cpu_time_ms": {
+    "SIGNED_DATA": 0.1614,
+    "VERIFY_REQUEST": 0.1942,
+    "DID_RESOLVED": 0.1978,
+    "SENSOR": 53.3039,
+    "CHAIN_RESULT": 0.1034
+  },
+  "loop_latency": {
+    "loop_1": 221.9855
+  },
+  "network_data_GB": 0.0203,
+  "latency_breakdown_ms": {
+    "iot_sign": 15.4000,
+    "edge_verify": 0.0617,
+    "relay_did_resolve": 0.0500,
+    "cloud_onchain_verify": 0.1000,
+    "network_roundtrip": 164.0,
+    "total_compute": 15.6117,
+    "compute_plus_network": 179.6
+  },
+  "bw_delay_ms": {
+    "sensor_to_iot": 1.6000,
+    "iot_to_edge": 14.1040,
+    "edge_to_relay": 1.4104,
+    "relay_to_cloud": 0.2821,
+    "total_bw_delay": 17.3965
+  },
+  "per_tx_estimate": {
+    "sign_MI": 1540,
+    "verify_MI": 370,
+    "did_resolve_MI": 200,
+    "onchain_verify_MI": 2000,
+    "tuple_size_bytes": 1763,
+    "pk_size_bytes": 897,
+    "sig_size_bytes": 666
+  }
+}
+=== RESULTS_JSON_END ===
+
+=== SUMMARY ===
+Scheme: FALCON | Devices: 200 | Gateways: 40 | Relays: 10
+Total Energy: 840135.97 W-s
+  L1-IoT (200): 96390.96 W-s total, 481.9548 W-s avg
+  L2-Edge (40): 262587.32 W-s total, 6564.68 W-s avg
+  L3-Relay (10): 263555.20 W-s
+  L4-Cloud: 217602.49 W-s
+Network Data (actual): 0.0203 GB
+Per-hop compute (ms): IoT_sign=15.400 Edge_verify=0.0617 Relay_DID=0.0500 Cloud_BC=0.1000
+Network latency (round-trip): 164.0ms
+BW delay per hop (ms): sensor->IoT=1.600 IoT->Edge=14.104 Edge->Relay=1.410 Relay->Cloud=0.282 total=17.396
+E2E Loop Latency: 221.9855 ms
+CPU Time per Tuple:
+  SIGNED_DATA: 0.1614 ms
+  VERIFY_REQUEST: 0.1942 ms
+  DID_RESOLVED: 0.1978 ms
+  SENSOR: 53.3039 ms
+  CHAIN_RESULT: 0.1034 ms

@@ -1,0 +1,148 @@
+=== Fog Simulation Configuration ===
+Scheme: FALCON
+Placement: fog
+IoT Devices: 50
+Edge Gateways: 10
+Relays: 2
+Simulation Time: 1000.0s
+=====================================
+Creating onchain_verifier on device cloud
+Creating auth_decision on device cloud
+Creating did_resolver on device proxy-server_0
+Creating sig_verifier on device d-0
+Creating crypto_signer on device m-0-0
+Creating crypto_signer on device m-0-1
+Creating crypto_signer on device m-0-2
+Creating crypto_signer on device m-0-3
+Creating crypto_signer on device m-0-4
+Creating sig_verifier on device d-1
+Creating crypto_signer on device m-1-0
+Creating crypto_signer on device m-1-1
+Creating crypto_signer on device m-1-2
+Creating crypto_signer on device m-1-3
+Creating crypto_signer on device m-1-4
+Creating sig_verifier on device d-2
+Creating crypto_signer on device m-2-0
+Creating crypto_signer on device m-2-1
+Creating crypto_signer on device m-2-2
+Creating crypto_signer on device m-2-3
+Creating crypto_signer on device m-2-4
+Creating sig_verifier on device d-3
+Creating crypto_signer on device m-3-0
+Creating crypto_signer on device m-3-1
+Creating crypto_signer on device m-3-2
+Creating crypto_signer on device m-3-3
+Creating crypto_signer on device m-3-4
+Creating sig_verifier on device d-4
+Creating crypto_signer on device m-4-0
+Creating crypto_signer on device m-4-1
+Creating crypto_signer on device m-4-2
+Creating crypto_signer on device m-4-3
+Creating crypto_signer on device m-4-4
+Creating did_resolver on device proxy-server_1
+Creating sig_verifier on device d-5
+Creating crypto_signer on device m-5-0
+Creating crypto_signer on device m-5-1
+Creating crypto_signer on device m-5-2
+Creating crypto_signer on device m-5-3
+Creating crypto_signer on device m-5-4
+Creating sig_verifier on device d-6
+Creating crypto_signer on device m-6-0
+Creating crypto_signer on device m-6-1
+Creating crypto_signer on device m-6-2
+Creating crypto_signer on device m-6-3
+Creating crypto_signer on device m-6-4
+Creating sig_verifier on device d-7
+Creating crypto_signer on device m-7-0
+Creating crypto_signer on device m-7-1
+Creating crypto_signer on device m-7-2
+Creating crypto_signer on device m-7-3
+Creating crypto_signer on device m-7-4
+Creating sig_verifier on device d-8
+Creating crypto_signer on device m-8-0
+Creating crypto_signer on device m-8-1
+Creating crypto_signer on device m-8-2
+Creating crypto_signer on device m-8-3
+Creating crypto_signer on device m-8-4
+Creating sig_verifier on device d-9
+Creating crypto_signer on device m-9-0
+Creating crypto_signer on device m-9-1
+Creating crypto_signer on device m-9-2
+Creating crypto_signer on device m-9-3
+Creating crypto_signer on device m-9-4
+0.0 Submitted application falcon_auth
+
+=== RESULTS_JSON_START ===
+{
+  "scheme": "falcon",
+  "placement": "fog",
+  "num_iot": 50,
+  "num_gateways": 10,
+  "num_relays": 2,
+  "sim_time_s": 1000.0,
+  "energy": {
+    "iot_total_Ws": 24127.05,
+    "iot_avg_Ws": 482.5410,
+    "edge_total_Ws": 72272.09,
+    "edge_avg_Ws": 7227.21,
+    "relay_total_Ws": 53481.51,
+    "cloud_Ws": 158220.09,
+    "total_Ws": 308100.74
+  },
+  "cpu_time_ms": {
+    "SIGNED_DATA": 0.1659,
+    "VERIFY_REQUEST": 0.1517,
+    "DID_RESOLVED": 0.7338,
+    "SENSOR": 52.3614,
+    "CHAIN_RESULT": 0.1042
+  },
+  "loop_latency": {
+    "loop_1": 220.4048
+  },
+  "network_data_GB": 0.0051,
+  "latency_breakdown_ms": {
+    "iot_sign": 15.4000,
+    "edge_verify": 0.0617,
+    "relay_did_resolve": 0.0500,
+    "cloud_onchain_verify": 0.1000,
+    "network_roundtrip": 164.0,
+    "total_compute": 15.6117,
+    "compute_plus_network": 179.6
+  },
+  "bw_delay_ms": {
+    "sensor_to_iot": 1.6000,
+    "iot_to_edge": 14.1040,
+    "edge_to_relay": 1.4104,
+    "relay_to_cloud": 0.2821,
+    "total_bw_delay": 17.3965
+  },
+  "per_tx_estimate": {
+    "sign_MI": 1540,
+    "verify_MI": 370,
+    "did_resolve_MI": 200,
+    "onchain_verify_MI": 2000,
+    "tuple_size_bytes": 1763,
+    "pk_size_bytes": 897,
+    "sig_size_bytes": 666
+  }
+}
+=== RESULTS_JSON_END ===
+
+=== SUMMARY ===
+Scheme: FALCON | Devices: 50 | Gateways: 10 | Relays: 2
+Total Energy: 308100.74 W-s
+  L1-IoT (50): 24127.05 W-s total, 482.5410 W-s avg
+  L2-Edge (10): 72272.09 W-s total, 7227.21 W-s avg
+  L3-Relay (2): 53481.51 W-s
+  L4-Cloud: 158220.09 W-s
+Network Data (actual): 0.0051 GB
+Per-hop compute (ms): IoT_sign=15.400 Edge_verify=0.0617 Relay_DID=0.0500 Cloud_BC=0.1000
+Network latency (round-trip): 164.0ms
+BW delay per hop (ms): sensor->IoT=1.600 IoT->Edge=14.104 Edge->Relay=1.410 Relay->Cloud=0.282 total=17.396
+E2E Loop Latency: 220.4048 ms
+CPU Time per Tuple:
+  SIGNED_DATA: 0.1659 ms
+  VERIFY_REQUEST: 0.1517 ms
+  DID_RESOLVED: 0.7338 ms
+  SENSOR: 52.3614 ms
+  CHAIN_RESULT: 0.1042 ms

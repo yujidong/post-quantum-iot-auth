@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-05-18T10:20:31.646Z",
+  "network": "hardhat",
+  "solidityVersion": "0.8.24",
+  "optimizer": {
+    "enabled": true,
+    "runs": 200
+  },
+  "falconParams": {
+    "publicKeySize": 897,
+    "signatureSize": 752
+  },
+  "results": {
+    "didRegistration": {
+      "mean": 771536.6,
+      "stddev": 12.92439553712281,
+      "min": 771503,
+      "max": 771551,
+      "n": 10,
+      "label": "DID Registration"
+    },
+    "publicKeyLookup": {
+      "mean": 94084,
+      "stddev": 0,
+      "min": 94084,
+      "max": 94084,
+      "n": 10,
+      "label": "Public Key Lookup"
+    },
+    "didDeactivation": {
+      "gas": 25917,
+      "label": "DID Deactivation"
+    },
+    "relayTransaction": {
+      "mean": 821563.2,
+      "stddev": 10259.611852307084,
+      "min": 818118,
+      "max": 852342,
+      "n": 10,
+      "label": "Relay Transaction"
+    },
+    "transactionRetrieval": {
+      "mean": 86499.8,
+      "stddev": 3.6000000000000005,
+      "min": 86489,
+      "max": 86501,
+      "n": 10,
+      "label": "Transaction Retrieval"
+    }
+  },
+  "comparison": {
+    "theoreticalFalconGas": 500000000,
+    "relayMeanGas": 821563.2,
+    "reductionRatio": 609
+  }
+}

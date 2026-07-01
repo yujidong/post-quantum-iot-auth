@@ -1,0 +1,43 @@
+# Build artifacts and caches
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# Node
+node_modules/
+smart-contracts/artifacts/
+smart-contracts/cache/
+smart-contracts/typechain-types/
+
+# Results (regenerated inside container)
+results/
+crypto_benchmark/results/
+smart-contracts/results/
+relay_system/results/
+scalability/results/
+
+# Secrets and environment (never ship)
+.env
+.env.*
+*.key
+*.pem
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Git
+.git/
+.gitignore

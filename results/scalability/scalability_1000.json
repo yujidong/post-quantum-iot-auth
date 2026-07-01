@@ -1,0 +1,21 @@
+{
+  "device_count": 1000,
+  "transactions_per_device": 10,
+  "total_transactions": 10000,
+  "total_time_ms": 162426.47190811113,
+  "throughput_tps": 61.56631910134242,
+  "avg_latency_ms": 25.140587834571487,
+  "p50_latency_ms": 23.173927795141935,
+  "p99_latency_ms": 53.92910004593432,
+  "total_gas": 7500056496,
+  "avg_gas_per_tx": 750005.6496,
+  "failed_transactions": 0,
+  "concurrent_threads": 200,
+  "backend": "hardhat",
+  "gateway_verify_tps": 5325.3,
+  "gateway_avg_latency_ms": 9.11,
+  "gateway_p99_latency_ms": 36.71,
+  "blockchain_submit_tps": 62.3,
+  "blockchain_avg_latency_ms": 16.03,
+  "blockchain_p99_latency_ms": 25.36
+}

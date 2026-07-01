@@ -1,0 +1,6 @@
+operation,mean_gas,std_dev,min_gas,max_gas,samples
+did_registration,771536.6,undefined,771503,771551,10
+public_key_lookup,94084,undefined,94084,94084,10
+did_deactivation,25917,0,25917,25917,1
+relay_transaction,821563.2,undefined,818118,852342,10
+transaction_retrieval,86499.8,undefined,86489,86501,10

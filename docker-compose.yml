@@ -1,0 +1,32 @@
+# Post-Quantum IoT Blockchain Experiment Environment
+#
+# Quick reference:
+#   Build:       docker compose build
+#   Python test: docker compose run --rm --entrypoint="" experiments python -m pytest tests/ -v
+#   Solidity:    docker compose run --rm --entrypoint="" experiments bash -c "cd smart-contracts && npx hardhat test"
+#   All tests:   docker compose run --rm experiments bash -c "./scripts/run-all-tests.sh"
+#   Full run:    docker compose run --rm experiments python analyze_results.py
+#   Shell:       docker compose run --rm experiments bash
+#   Clean:       docker compose down --rmi all --volumes
+
+services:
+  experiments:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pqc-iot-blockchain:latest
+    container_name: pqc-experiments
+    volumes:
+      # Mount results directory so outputs persist on host
+      - ./results:/app/experiments/results
+      - ./crypto_benchmark/results:/app/experiments/crypto_benchmark/results
+      - ./smart-contracts/results:/app/experiments/smart-contracts/results
+      - ./relay_system/results:/app/experiments/relay_system/results
+      - ./scalability/results:/app/experiments/scalability/results
+      - ./security/results:/app/experiments/security/results
+    working_dir: /app/experiments
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app/experiments
+    mem_limit: 8g
+    cpus: 8

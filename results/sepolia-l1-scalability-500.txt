@@ -1,0 +1,47 @@
+◇ injected env (4) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+◇ injected env (0) from .env // tip: ⌘ enable debugging { debug: true }
+◇ injected env (0) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+============================================
+  Sepolia Scalability Test: 500 Devices
+============================================
+Relay 1: 0x8677244Ad457159b988DBBc34C92900d16D57445  (1.434187459509228481 ETH)
+Relay 2: 0x49556d7F15D92E68402d69046f2899a37b212589  (0.909339781441831622 ETH)
+
+Deploying contracts...
+  DIDRegistry: 0x443E13341Be3D51E42675A758543Fa72BeA6d445
+  MetaTxRelay: 0x833f8D82291B213a1608c24B54Abe0074eF8B5Ca
+
+--- Phase 1: Registering 500 DIDs (250 per relay) ---
+  Relay1-DID: 10/250 (4%)  Relay2-DID: 10/250 (4%)  Relay1-DID: 20/250 (8%)  Relay2-DID: 20/250 (8%)  Relay1-DID: 30/250 (12%)  Relay2-DID: 30/250 (12%)  Relay1-DID: 40/250 (16%)  Relay2-DID: 40/250 (16%)  Relay1-DID: 50/250 (20%)  Relay2-DID: 50/250 (20%)  Relay1-DID: 60/250 (24%)  Relay2-DID: 60/250 (24%)  Relay1-DID: 70/250 (28%)  Relay2-DID: 70/250 (28%)  Relay1-DID: 80/250 (32%)  Relay2-DID: 80/250 (32%)  Relay1-DID: 90/250 (36%)  Relay2-DID: 90/250 (36%)  Relay1-DID: 100/250 (40%)  Relay2-DID: 100/250 (40%)  Relay1-DID: 110/250 (44%)  Relay2-DID: 110/250 (44%)  Relay1-DID: 120/250 (48%)  Relay2-DID: 120/250 (48%)  Relay1-DID: 130/250 (52%)  Relay2-DID: 130/250 (52%)  Relay1-DID: 140/250 (56%)  Relay2-DID: 140/250 (56%)  Relay1-DID: 150/250 (60%)  Relay2-DID: 150/250 (60%)  Relay1-DID: 160/250 (64%)  Relay2-DID: 160/250 (64%)  Relay1-DID: 170/250 (68%)  Relay2-DID: 170/250 (68%)  Relay1-DID: 180/250 (72%)  Relay2-DID: 180/250 (72%)  Relay1-DID: 190/250 (76%)  Relay2-DID: 190/250 (76%)  Relay1-DID: 200/250 (80%)  Relay2-DID: 200/250 (80%)  Relay1-DID: 210/250 (84%)  Relay2-DID: 210/250 (84%)  Relay1-DID: 220/250 (88%)  Relay2-DID: 220/250 (88%)  Relay1-DID: 230/250 (92%)  Relay2-DID: 230/250 (92%)  Relay1-DID: 240/250 (96%)  Relay2-DID: 240/250 (96%)  Relay1-DID: 250/250 (100%)  Relay2-DID: 250/250 (100%)  Relay1-DID: 250/250 (100%)
+  Relay2-DID: 250/250 (100%)
+  Time: 311.5s
+  DID Register gas: avg=771490, min=751627, max=771575
+
+--- Phase 2: Submitting 500 Relay Transactions (250 per relay) ---
+  Relay1-TX: 10/250 (4%)  Relay2-TX: 10/250 (4%)  Relay1-TX: 20/250 (8%)  Relay2-TX: 20/250 (8%)  Relay1-TX: 30/250 (12%)  Relay2-TX: 30/250 (12%)  Relay1-TX: 40/250 (16%)  Relay2-TX: 40/250 (16%)  Relay1-TX: 50/250 (20%)  Relay2-TX: 50/250 (20%)  Relay1-TX: 60/250 (24%)  Relay2-TX: 60/250 (24%)  Relay1-TX: 70/250 (28%)  Relay2-TX: 70/250 (28%)  Relay1-TX: 80/250 (32%)  Relay2-TX: 80/250 (32%)  Relay1-TX: 90/250 (36%)  Relay2-TX: 90/250 (36%)  Relay1-TX: 100/250 (40%)  Relay2-TX: 100/250 (40%)  Relay1-TX: 110/250 (44%)  Relay2-TX: 110/250 (44%)  Relay1-TX: 120/250 (48%)  Relay2-TX: 120/250 (48%)  Relay1-TX: 130/250 (52%)  Relay2-TX: 130/250 (52%)  Relay1-TX: 140/250 (56%)  Relay2-TX: 140/250 (56%)  Relay1-TX: 150/250 (60%)  Relay2-TX: 150/250 (60%)  Relay1-TX: 160/250 (64%)  Relay2-TX: 160/250 (64%)  Relay1-TX: 170/250 (68%)  Relay1-TX: 180/250 (72%)  Relay1-TX: 190/250 (76%)  Relay1-TX: 200/250 (80%)  Relay1-TX: 210/250 (84%)  Relay1-TX: 220/250 (88%)  Relay1-TX: 230/250 (92%)  Relay1-TX: 240/250 (96%)  Relay1-TX: 250/250 (100%)  Relay1-TX: 250/250 (100%)
+  Relay2-TX: 170/250 (68%)  Relay2-TX: 180/250 (72%)  Relay2-TX: 190/250 (76%)  Relay2-TX: 200/250 (80%)  Relay2-TX: 210/250 (84%)  Relay2-TX: 220/250 (88%)  Relay2-TX: 230/250 (92%)  Relay2-TX: 240/250 (96%)  Relay2-TX: 250/250 (100%)  Relay2-TX: 250/250 (100%)
+  Time: 2049.9s
+  Confirmed: 500/500
+  Relay TX gas: avg=750184, min=750042, max=784338
+
+--- Phase 3: On-chain Verification ---
+  Transactions on-chain: 500
+
+Error: could not coalesce error (error={ "code": 429, "message": "Your app has exceeded its compute units per second capacity. If you have retries enabled, you can safely ignore this message. If not, check out https://docs.alchemy.com/reference/throughput" }, payload={ "id": 8162, "jsonrpc": "2.0", "method": "eth_getBalance", "params": [ "0x49556d7f15d92e68402d69046f2899a37b212589", "latest" ] }, code=UNKNOWN_ERROR, version=6.16.0)
+    at makeError (<repo>/smart-contracts/node_modules/ethers/src.ts/utils/errors.ts:698:21)
+    at JsonRpcProvider.getRpcError (<repo>/smart-contracts/node_modules/ethers/src.ts/providers/provider-jsonrpc.ts:1086:25)
+    at <repo>/smart-contracts/node_modules/ethers/src.ts/providers/provider-jsonrpc.ts:571:45
+    at processTicksAndRejections (node:internal/process/task_queues:105:5) {
+  code: 'UNKNOWN_ERROR',
+  error: {
+    code: 429,
+    message: 'Your app has exceeded its compute units per second capacity. If you have retries enabled, you can safely ignore this message. If not, check out https://docs.alchemy.com/reference/throughput'
+  },
+  payload: {
+    method: 'eth_getBalance',
+    params: [ '0x49556d7f15d92e68402d69046f2899a37b212589', 'latest' ],
+    id: 8162,
+    jsonrpc: '2.0'
+  },
+  shortMessage: 'could not coalesce error'
+}

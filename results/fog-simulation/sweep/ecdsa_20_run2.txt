@@ -1,0 +1,131 @@
+=== Fog Simulation Configuration ===
+Scheme: ECDSA
+Placement: fog
+IoT Devices: 20
+Edge Gateways: 4
+Relays: 1
+Simulation Time: 1000.0s
+=====================================
+m-0-0 is shifting crypto_signer north.
+m-0-1 is shifting crypto_signer north.
+m-0-2 is shifting crypto_signer north.
+m-0-3 is shifting crypto_signer north.
+m-0-4 is shifting crypto_signer north.
+m-1-0 is shifting crypto_signer north.
+m-1-1 is shifting crypto_signer north.
+m-1-2 is shifting crypto_signer north.
+m-1-3 is shifting crypto_signer north.
+m-1-4 is shifting crypto_signer north.
+m-2-0 is shifting crypto_signer north.
+m-2-1 is shifting crypto_signer north.
+m-2-2 is shifting crypto_signer north.
+m-2-3 is shifting crypto_signer north.
+m-2-4 is shifting crypto_signer north.
+m-3-0 is shifting crypto_signer north.
+m-3-1 is shifting crypto_signer north.
+m-3-2 is shifting crypto_signer north.
+m-3-3 is shifting crypto_signer north.
+m-3-4 is shifting crypto_signer north.
+Creating onchain_verifier on device cloud
+Creating auth_decision on device cloud
+Creating did_resolver on device proxy-server_0
+Creating sig_verifier on device d-0
+Creating crypto_signer on device d-0
+Creating crypto_signer on device d-0
+Creating crypto_signer on device d-0
+Creating crypto_signer on device d-0
+Creating crypto_signer on device d-0
+Creating sig_verifier on device d-1
+Creating crypto_signer on device d-1
+Creating crypto_signer on device d-1
+Creating crypto_signer on device d-1
+Creating crypto_signer on device d-1
+Creating crypto_signer on device d-1
+Creating sig_verifier on device d-2
+Creating crypto_signer on device d-2
+Creating crypto_signer on device d-2
+Creating crypto_signer on device d-2
+Creating crypto_signer on device d-2
+Creating crypto_signer on device d-2
+Creating sig_verifier on device d-3
+Creating crypto_signer on device d-3
+Creating crypto_signer on device d-3
+Creating crypto_signer on device d-3
+Creating crypto_signer on device d-3
+Creating crypto_signer on device d-3
+0.0 Submitted application ecdsa_auth
+
+=== RESULTS_JSON_START ===
+{
+  "scheme": "ecdsa",
+  "placement": "fog",
+  "num_iot": 20,
+  "num_gateways": 4,
+  "num_relays": 1,
+  "sim_time_s": 1000.0,
+  "energy": {
+    "iot_total_Ws": 1800.00,
+    "iot_avg_Ws": 90.0000,
+    "edge_total_Ws": 46452.58,
+    "edge_avg_Ws": 11613.14,
+    "relay_total_Ws": 25022.75,
+    "cloud_Ws": 130619.06,
+    "total_Ws": 203894.39
+  },
+  "cpu_time_ms": {
+    "SIGNED_DATA": 4.5171,
+    "VERIFY_REQUEST": 0.1924,
+    "DID_RESOLVED": 0.2214,
+    "SENSOR": 8.6022,
+    "CHAIN_RESULT": 0.1030
+  },
+  "loop_latency": {
+    "loop_1": 181.3730
+  },
+  "network_data_GB": 0.0005,
+  "latency_breakdown_ms": {
+    "iot_sign": 60.0000,
+    "edge_verify": 0.3617,
+    "relay_did_resolve": 0.0500,
+    "cloud_onchain_verify": 0.1000,
+    "network_roundtrip": 164.0,
+    "total_compute": 60.5117,
+    "compute_plus_network": 224.5
+  },
+  "bw_delay_ms": {
+    "sensor_to_iot": 1.6000,
+    "iot_to_edge": 2.6240,
+    "edge_to_relay": 0.2624,
+    "relay_to_cloud": 0.0525,
+    "total_bw_delay": 4.5389
+  },
+  "per_tx_estimate": {
+    "sign_MI": 6000,
+    "verify_MI": 2170,
+    "did_resolve_MI": 200,
+    "onchain_verify_MI": 2000,
+    "tuple_size_bytes": 328,
+    "pk_size_bytes": 64,
+    "sig_size_bytes": 64
+  }
+}
+=== RESULTS_JSON_END ===
+
+=== SUMMARY ===
+Scheme: ECDSA | Devices: 20 | Gateways: 4 | Relays: 1
+Total Energy: 203894.39 W-s
+  L1-IoT (20): 1800.00 W-s total, 90.0000 W-s avg
+  L2-Edge (4): 46452.58 W-s total, 11613.14 W-s avg
+  L3-Relay (1): 25022.75 W-s
+  L4-Cloud: 130619.06 W-s
+Network Data (actual): 0.0005 GB
+Per-hop compute (ms): IoT_sign=60.000 Edge_verify=0.3617 Relay_DID=0.0500 Cloud_BC=0.1000
+Network latency (round-trip): 164.0ms
+BW delay per hop (ms): sensor->IoT=1.600 IoT->Edge=2.624 Edge->Relay=0.262 Relay->Cloud=0.052 total=4.539
+E2E Loop Latency: 181.3730 ms
+CPU Time per Tuple:
+  SIGNED_DATA: 4.5171 ms
+  VERIFY_REQUEST: 0.1924 ms
+  DID_RESOLVED: 0.2214 ms
+  SENSOR: 8.6022 ms
+  CHAIN_RESULT: 0.1030 ms

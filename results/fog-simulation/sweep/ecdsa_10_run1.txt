@@ -1,0 +1,109 @@
+=== Fog Simulation Configuration ===
+Scheme: ECDSA
+Placement: fog
+IoT Devices: 10
+Edge Gateways: 2
+Relays: 1
+Simulation Time: 1000.0s
+=====================================
+m-0-0 is shifting crypto_signer north.
+m-0-1 is shifting crypto_signer north.
+m-0-2 is shifting crypto_signer north.
+m-0-3 is shifting crypto_signer north.
+m-0-4 is shifting crypto_signer north.
+m-1-0 is shifting crypto_signer north.
+m-1-1 is shifting crypto_signer north.
+m-1-2 is shifting crypto_signer north.
+m-1-3 is shifting crypto_signer north.
+m-1-4 is shifting crypto_signer north.
+Creating onchain_verifier on device cloud
+Creating auth_decision on device cloud
+Creating did_resolver on device proxy-server_0
+Creating sig_verifier on device d-0
+Creating crypto_signer on device d-0
+Creating crypto_signer on device d-0
+Creating crypto_signer on device d-0
+Creating crypto_signer on device d-0
+Creating crypto_signer on device d-0
+Creating sig_verifier on device d-1
+Creating crypto_signer on device d-1
+Creating crypto_signer on device d-1
+Creating crypto_signer on device d-1
+Creating crypto_signer on device d-1
+Creating crypto_signer on device d-1
+0.0 Submitted application ecdsa_auth
+
+=== RESULTS_JSON_START ===
+{
+  "scheme": "ecdsa",
+  "placement": "fog",
+  "num_iot": 10,
+  "num_gateways": 2,
+  "num_relays": 1,
+  "sim_time_s": 1000.0,
+  "energy": {
+    "iot_total_Ws": 900.00,
+    "iot_avg_Ws": 90.0000,
+    "edge_total_Ws": 23335.60,
+    "edge_avg_Ws": 11667.80,
+    "relay_total_Ws": 23800.14,
+    "cloud_Ws": 117583.60,
+    "total_Ws": 165619.34
+  },
+  "cpu_time_ms": {
+    "SIGNED_DATA": 0.7397,
+    "VERIFY_REQUEST": 0.2375,
+    "DID_RESOLVED": 0.2188,
+    "SENSOR": 7.0557,
+    "CHAIN_RESULT": 0.1030
+  },
+  "loop_latency": {
+    "loop_1": 180.7899
+  },
+  "network_data_GB": 0.0003,
+  "latency_breakdown_ms": {
+    "iot_sign": 60.0000,
+    "edge_verify": 0.3617,
+    "relay_did_resolve": 0.0500,
+    "cloud_onchain_verify": 0.1000,
+    "network_roundtrip": 164.0,
+    "total_compute": 60.5117,
+    "compute_plus_network": 224.5
+  },
+  "bw_delay_ms": {
+    "sensor_to_iot": 1.6000,
+    "iot_to_edge": 2.6240,
+    "edge_to_relay": 0.2624,
+    "relay_to_cloud": 0.0525,
+    "total_bw_delay": 4.5389
+  },
+  "per_tx_estimate": {
+    "sign_MI": 6000,
+    "verify_MI": 2170,
+    "did_resolve_MI": 200,
+    "onchain_verify_MI": 2000,
+    "tuple_size_bytes": 328,
+    "pk_size_bytes": 64,
+    "sig_size_bytes": 64
+  }
+}
+=== RESULTS_JSON_END ===
+
+=== SUMMARY ===
+Scheme: ECDSA | Devices: 10 | Gateways: 2 | Relays: 1
+Total Energy: 165619.34 W-s
+  L1-IoT (10): 900.00 W-s total, 90.0000 W-s avg
+  L2-Edge (2): 23335.60 W-s total, 11667.80 W-s avg
+  L3-Relay (1): 23800.14 W-s
+  L4-Cloud: 117583.60 W-s
+Network Data (actual): 0.0003 GB
+Per-hop compute (ms): IoT_sign=60.000 Edge_verify=0.3617 Relay_DID=0.0500 Cloud_BC=0.1000
+Network latency (round-trip): 164.0ms
+BW delay per hop (ms): sensor->IoT=1.600 IoT->Edge=2.624 Edge->Relay=0.262 Relay->Cloud=0.052 total=4.539
+E2E Loop Latency: 180.7899 ms
+CPU Time per Tuple:
+  SIGNED_DATA: 0.7397 ms
+  VERIFY_REQUEST: 0.2375 ms
+  DID_RESOLVED: 0.2188 ms
+  SENSOR: 7.0557 ms
+  CHAIN_RESULT: 0.1030 ms
