@@ -5,52 +5,49 @@ import "./DIDRegistry.sol";
 
 /**
  * @title AccountableRelay
- * @notice V2 of the MetaTxRelay research prototype: accountable relaying
- *         with optimistic on-chain verification for post-quantum IoT
- *         authentication.
+ * @notice V3 of the research prototype: accountable relaying with optimistic
+ *         on-chain verification for post-quantum IoT authentication.
  *
- *         Motivation (reviewer-driven redesign): in V1 the smart contract
- *         stored whatever the relay claimed, the submitting relay was not
- *         even recorded per transaction, and replay protection did not
- *         bind signatures to a DID/nonce/chain context. A compromised
- *         (or quantum-forged) relay ECDSA key could therefore commit
- *         arbitrary payloads as "verified" records.
+ *         V3 hardens the adjudication mechanism of V2 against the attacks
+ *         identified in internal review:
  *
- *         V2 closes this gap with four mechanisms:
+ *         1. No challenge-window bypass. A "spurious dispute" resolution no
+ *            longer confirms a record; it returns the record (or batch leaf)
+ *            to the undecided state, so the full challenge window must
+ *            elapse before finalization and disputes can be reopened with
+ *            new evidence.
  *
- *         1. Attributable endorsement. Only a staked relay may submit;
- *            every record permanently names its submitting relay, so
- *            misbehaviour is attributable and economically punishable.
+ *         2. Cross-dispute wrong-side slashing. Every "valid" attestation
+ *            ever cast on a target is registered; the first fraud verdict
+ *            proven for that target slashes all of them. Colluding
+ *            verifiers therefore remain punishable until the target is
+ *            finalized, not only while their own dispute is open.
  *
- *         2. Context binding. Each submission consumes a per-DID nonce
- *            assigned on-chain and the anti-replay commitment domain-
- *            separates (DID, nonce, data hash, signature hash, chain id,
- *            contract address). Batch leaves bind the same tuple into the
- *            Merkle root, which the contract constructs itself from the
- *            submitted calldata.
+ *         3. Verifier economics. Verifiers register in an explicit roster
+ *            (q-of-n quorum), earn a share of the relay slash on fraud
+ *            verdicts and a share of the challenger bond on spurious
+ *            verdicts, and can exit after a delay. Attendance pays;
+ *            non-attendance forfeits.
  *
- *         3. Optimistic verification. Records land on-chain in the
- *            Provisional state and only become Confirmed after a
- *            challenge window. During the window any watchdog can open a
- *            dispute; Falcon verification itself stays off-chain (direct
- *            on-chain Falcon verification costs ~5e8 gas and exceeds the
- *            block gas limit), but it is now enforced as a *contestable*
- *            obligation backed by stakes, not an unverified relay claim.
+ *         4. Anti-griefing fail-closed expiry. A dispute that expires
+ *            without quorum revokes the target but refunds only half the
+ *            challenger bond (the rest is burned), so disputing honest
+ *            records costs real money even when no verdict forms.
  *
- *         4. Committee adjudication. Disputes are resolved by t-of-n
- *            ECDSA attestations from staked verifier nodes that re-run
- *            Falcon verification off-chain. Confirmed fraud revokes the
- *            record and slashes the relay; a spurious dispute slashes the
- *            challenger; verifiers on the losing side of a resolved
- *            dispute are slashed as well. The adjudication layer is an
- *            explicit transition-era trust assumption: it disappears
- *            once EVM-level FN-DSA support allows the same dispute path
- *            to verify Falcon directly on-chain.
+ *         5. Per-leaf batch disputability. Batch leaves can be disputed
+ *            independently and in parallel; a batch finalizes only after
+ *            its window closes and every open leaf dispute has resolved.
+ *            Revoked leaves are tracked individually.
+ *
+ *         6. Hygiene. Reentrancy guard on resolution paths, conflict-of-
+ *            interest ban (a target's endorsing relay cannot attest on its
+ *            own disputes), and per-relay active-dispute counters instead
+ *            of a boolean review flag.
  *
  * @dev Research prototype. Bond and bounty amounts are deployment
- *      parameters; the reference Hardhat benchmark uses 1 / 0.5 / 0.1 /
- *      0.5 / 0.25 ETH for relay stake, verifier stake, challenger bond,
- *      relay slash, and verifier slash respectively.
+ *      parameters; the reference Hardhat benchmark uses the values listed
+ *      in the paper's slashing schedule. Payouts follow
+ *      checks-effects-interactions; the guard is defense in depth.
  */
 contract AccountableRelay {
     // ------------------------------------------------------------------
@@ -59,11 +56,11 @@ contract AccountableRelay {
     error NotStakedRelay();
     error InactiveDID();
     error BadSignatureLength();
-    error ReplayDetected();
     error BadAvailabilityLength();
     error BatchLengthMismatch();
     error DuplicateAttestation();
     error NotVerifier();
+    error NotRegisteredVerifier();
     error BadAttestation();
     error NothingToFinalize();
     error ChallengeWindowOpen();
@@ -72,17 +69,28 @@ contract AccountableRelay {
     error BadMerkleProof();
     error UnknownDispute();
     error StillStaked();
-    error UnderReview();
+    error ActiveDisputes();
     error InsufficientBond();
+    error ConflictOfInterest();
+    error LeafNotDisputable();
+    error OpenLeafDisputes();
+    error Reentrant();
 
     // ------------------------------------------------------------------
     // Types and storage
     // ------------------------------------------------------------------
     enum RecordState {
         Provisional, // inside the challenge window
-        Confirmed, // window closed without a successful dispute
-        Disputed, // an active dispute exists
-        Revoked // fraud proven; excluded from the audit trail
+        Confirmed, // window closed without a proven-fraud outcome
+        Disputed, // an active dispute exists (single records)
+        Revoked // fraud proven or fail-closed; excluded from the audit trail
+    }
+
+    enum LeafState {
+        Undisputed, // inside the challenge window, never disputed
+        Disputed, // an active dispute exists on this leaf
+        Revoked, // fraud proven (or fail-closed expiry) on this leaf
+        Upheld // a dispute resolved spurious; disputable again
     }
 
     struct Record {
@@ -102,7 +110,8 @@ contract AccountableRelay {
         bytes32 availabilityCommitment; // keccak256 over concatenated raw signatures
         uint64 submittedAt;
         address relay;
-        RecordState state;
+        uint256 revokedLeafCount; // leaves revoked by fraud/expiry verdicts
+        RecordState state; // Provisional until finalized (leaf states tracked separately)
     }
 
     struct Dispute {
@@ -122,8 +131,8 @@ contract AccountableRelay {
     uint64 public immutable challengePeriod;
     uint256 public immutable quorum;
 
-    // Accountability economics (deployment-configurable; the reference
-    // Hardhat benchmark uses 1 / 0.5 / 0.1 / 0.5 / 0.25 ETH).
+    // Accountability economics (deployment parameters; reference values in
+    // the paper's slashing schedule: 1 / 0.5 / 0.1 / 0.5 / 0.25 ETH).
     uint256 public immutable relayStakeAmount;
     uint256 public immutable verifierStakeAmount;
     uint256 public immutable challengerBondAmount;
@@ -135,29 +144,43 @@ contract AccountableRelay {
 
     mapping(address => uint256) public relayStake;
     mapping(address => uint256) public relayExitTime;
-    mapping(address => bool) public relayUnderReview;
+    mapping(address => uint256) public relayActiveDisputes; // open disputes naming this relay
+
+    // Verifier committee roster (explicit n; quorum is q of n).
     mapping(address => uint256) public verifierStake;
+    mapping(address => bool) public isRegisteredVerifier;
+    mapping(address => uint256) public verifierExitTime;
+    address[] private _verifierRoster;
+    uint256 public verifierCount;
 
     mapping(bytes32 => uint256) public didNonce; // per-DID sequence numbers
-    mapping(bytes32 => bool) public usedCommitments; // replay defence (single mode)
 
     Record[] private records;
     Batch[] private batches;
     Dispute[] private disputes;
-    mapping(uint256 => mapping(address => bool)) private hasAttested;
+
+    // Batch leaf states and open-dispute accounting.
+    mapping(uint256 => mapping(uint256 => LeafState)) public batchLeafState;
+    mapping(uint256 => uint256) public batchOpenLeafDisputes;
+
+    // Cross-dispute registry of "valid" attestations per target: the first
+    // fraud verdict for a target slashes every listed verifier.
+    mapping(bytes32 => address[]) private _targetValidList;
+    mapping(bytes32 => mapping(address => bool)) private _targetValidHas;
+
+    mapping(uint256 => mapping(address => bool)) private _hasAttested;
+
+    uint256 private _guard = 1;
 
     // ------------------------------------------------------------------
-    // Events (consensus-critical data availability for batch leaves)
+    // Events
     // ------------------------------------------------------------------
     event RelayStaked(address indexed relay, uint256 amount);
     event RelayUnstaked(address indexed relay, uint256 amount);
-    event VerifierStaked(address indexed verifier, uint256 amount);
+    event VerifierRegistered(address indexed verifier);
+    event VerifierUnstaked(address indexed verifier, uint256 amount);
     event RecordSubmitted(
-        uint256 indexed index,
-        bytes32 indexed didHash,
-        uint256 nonce,
-        bytes32 dataHash,
-        address indexed relay
+        uint256 indexed index, bytes32 indexed didHash, uint256 nonce, bytes32 dataHash, address indexed relay
     );
     event RecordFinalized(uint256 indexed index);
     event BatchSubmitted(
@@ -168,16 +191,20 @@ contract AccountableRelay {
         address indexed relay
     );
     event BatchLeaf(
-        uint256 indexed batchIndex,
-        uint256 indexed leafIndex,
-        bytes32 indexed didHash,
-        uint256 nonce,
-        bytes32 dataHash,
-        bytes32 sigHash
+        uint256 indexed batchIndex, uint256 indexed leafIndex, bytes32 indexed didHash, uint256 nonce, bytes32 dataHash, bytes32 sigHash
     );
-    event BatchFinalized(uint256 indexed batchIndex);
+    event BatchFinalized(uint256 indexed batchIndex, uint256 revokedLeafCount);
     event DisputeOpened(uint256 indexed disputeId, uint8 targetType, uint256 targetIndex, address challenger);
     event DisputeResolved(uint256 indexed disputeId, bool fraudProven);
+    event DisputeExpired(uint256 indexed disputeId);
+    event LeafRevoked(uint256 indexed batchIndex, uint256 indexed leafIndex);
+
+    modifier nonReentrant() {
+        if (_guard != 1) revert Reentrant();
+        _guard = 2;
+        _;
+        _guard = 1;
+    }
 
     // ------------------------------------------------------------------
     // Construction
@@ -203,7 +230,7 @@ contract AccountableRelay {
     }
 
     // ------------------------------------------------------------------
-    // Stake management
+    // Stake and committee management
     // ------------------------------------------------------------------
     function stakeRelay() external payable {
         if (msg.value == 0) revert NotStakedRelay();
@@ -212,18 +239,16 @@ contract AccountableRelay {
     }
 
     function announceUnstake() external {
-        if (relayStake[msg.sender] < relayStakeAmount) revert NotStakedRelay();
-        if (relayUnderReview[msg.sender]) revert UnderReview();
+        if (relayStake[msg.sender] == 0) revert NotStakedRelay();
+        if (relayActiveDisputes[msg.sender] != 0) revert ActiveDisputes();
         relayExitTime[msg.sender] = block.timestamp + UNSTAKE_DELAY;
     }
 
-    function unstakeRelay() external {
+    function unstakeRelay() external nonReentrant {
         uint256 amount = relayStake[msg.sender];
         if (amount == 0) revert NotStakedRelay();
-        if (relayUnderReview[msg.sender]) revert UnderReview();
-        if (relayExitTime[msg.sender] == 0 || block.timestamp < relayExitTime[msg.sender]) {
-            revert StillStaked();
-        }
+        if (relayActiveDisputes[msg.sender] != 0) revert ActiveDisputes();
+        if (relayExitTime[msg.sender] == 0 || block.timestamp < relayExitTime[msg.sender]) revert StillStaked();
         relayStake[msg.sender] = 0;
         relayExitTime[msg.sender] = 0;
         (bool ok, ) = msg.sender.call{value: amount}("");
@@ -234,29 +259,54 @@ contract AccountableRelay {
     function stakeVerifier() external payable {
         if (msg.value == 0) revert NotVerifier();
         verifierStake[msg.sender] += msg.value;
-        emit VerifierStaked(msg.sender, msg.value);
+        if (!isRegisteredVerifier[msg.sender] && verifierStake[msg.sender] >= verifierStakeAmount) {
+            isRegisteredVerifier[msg.sender] = true;
+            _verifierRoster.push(msg.sender);
+            verifierCount += 1;
+            emit VerifierRegistered(msg.sender);
+        }
+    }
+
+    function announceVerifierUnstake() external {
+        if (verifierStake[msg.sender] == 0) revert NotVerifier();
+        verifierExitTime[msg.sender] = block.timestamp + UNSTAKE_DELAY;
+    }
+
+    function unstakeVerifier() external nonReentrant {
+        uint256 amount = verifierStake[msg.sender];
+        if (amount == 0) revert NotVerifier();
+        if (verifierExitTime[msg.sender] == 0 || block.timestamp < verifierExitTime[msg.sender]) revert StillStaked();
+        if (isRegisteredVerifier[msg.sender] && verifierStake[msg.sender] >= verifierStakeAmount) {
+            revert StillStaked(); // must drop below threshold first via slashing, or lower stake
+        }
+        verifierStake[msg.sender] = 0;
+        verifierExitTime[msg.sender] = 0;
+        (bool ok, ) = msg.sender.call{value: amount}("");
+        require(ok, "unstake transfer failed");
+        emit VerifierUnstaked(msg.sender, amount);
+    }
+
+    function verifierRoster(uint256 i) external view returns (address) {
+        return _verifierRoster[i];
     }
 
     // ------------------------------------------------------------------
-    // 1. Accountable single-record submission
+    // Accountable single-record submission
     // ------------------------------------------------------------------
-    function submitAccountable(
-        bytes32 dataHash,
-        bytes32 didHash,
-        bytes calldata falconSignature
-    ) external returns (uint256 index) {
+    function submitAccountable(bytes32 dataHash, bytes32 didHash, bytes calldata falconSignature)
+        external
+        returns (uint256 index)
+    {
         if (relayStake[msg.sender] < relayStakeAmount) revert NotStakedRelay();
         if (!didRegistry.isActive(didHash)) revert InactiveDID();
         if (falconSignature.length == 0 || falconSignature.length > FALCON_512_SIG_SIZE_MAX) {
             revert BadSignatureLength();
         }
 
-        // Context binding: nonce assigned on-chain, commitment domain-separated.
+        // Context binding: the on-chain-assigned nonce makes each recorded
+        // (DID, payload, signature) consumption a unique, ordered event; the
+        // record fields themselves are the commitment.
         uint256 nonce = ++didNonce[didHash];
-        bytes32 commitment =
-            keccak256(abi.encode(block.chainid, address(this), didHash, nonce, dataHash, keccak256(falconSignature)));
-        if (usedCommitments[commitment]) revert ReplayDetected();
-        usedCommitments[commitment] = true;
 
         bytes memory pubKey = didRegistry.getPublicKey(didHash);
 
@@ -268,17 +318,17 @@ contract AccountableRelay {
                 falconSignature: falconSignature,
                 pubKeyHash: keccak256(pubKey),
                 submittedAt: uint64(block.timestamp),
-                relay: msg.sender, // attributable endorsement
+                relay: msg.sender,
                 nonce: nonce,
-                state: RecordState.Provisional // optimistic: not yet final
-             })
+                state: RecordState.Provisional
+            })
         );
 
         emit RecordSubmitted(index, didHash, nonce, dataHash, msg.sender);
     }
 
     // ------------------------------------------------------------------
-    // 2. Permissionless finalization after the challenge window
+    // Permissionless finalization after the challenge window
     // ------------------------------------------------------------------
     function finalizeRecord(uint256 index) external {
         Record storage r = records[index];
@@ -289,26 +339,12 @@ contract AccountableRelay {
     }
 
     // ------------------------------------------------------------------
-    // 3. Accountable batch submission with bound Merkle leaves
-    //
-    //    availabilityData carries the concatenated raw Falcon signatures
-    //    (padded to FALCON_512_SIG_SIZE_MAX each); the transaction
-    //    calldata itself is the publication layer for offline
-    //    re-verification (upgradeable to EIP-4844 blobs, which would
-    //    store only the versioned blob hash on-chain).
-    //
-    //    leaf_i = keccak256(BATCH_LEAF_DOMAIN, chainid, this,
-    //                       batchIndex, did_i, nonce_i, dataHash_i, sigHash_i)
-    //
-    //    Nonces are assigned on-chain and the tree is constructed by the
-    //    contract, so every leaf is bound to its DID, payload, signature
-    //    and batch context before the root ever reaches storage.
+    // Accountable batch submission with bound Merkle leaves
     // ------------------------------------------------------------------
-    function submitBatch(
-        bytes32[] calldata didHashes,
-        bytes32[] calldata dataHashes,
-        bytes calldata availabilityData
-    ) external returns (uint256 batchIndex, bytes32 root) {
+    function submitBatch(bytes32[] calldata didHashes, bytes32[] calldata dataHashes, bytes calldata availabilityData)
+        external
+        returns (uint256 batchIndex, bytes32 root)
+    {
         if (relayStake[msg.sender] < relayStakeAmount) revert NotStakedRelay();
         uint256 k = didHashes.length;
         if (k == 0 || dataHashes.length != k) revert BatchLengthMismatch();
@@ -330,6 +366,7 @@ contract AccountableRelay {
                 availabilityCommitment: keccak256(availabilityData),
                 submittedAt: uint64(block.timestamp),
                 relay: msg.sender,
+                revokedLeafCount: 0,
                 state: RecordState.Provisional
             })
         );
@@ -341,19 +378,20 @@ contract AccountableRelay {
         Batch storage b = batches[batchIndex];
         if (b.state != RecordState.Provisional) revert NothingToFinalize();
         if (block.timestamp < b.submittedAt + challengePeriod) revert ChallengeWindowOpen();
+        if (batchOpenLeafDisputes[batchIndex] != 0) revert OpenLeafDisputes();
         b.state = RecordState.Confirmed;
-        emit BatchFinalized(batchIndex);
+        emit BatchFinalized(batchIndex, b.revokedLeafCount);
     }
 
     // ------------------------------------------------------------------
-    // 4. Disputes
+    // Disputes
     // ------------------------------------------------------------------
     function openDispute(uint256 recordIndex) external payable returns (uint256 disputeId) {
         if (msg.value < challengerBondAmount) revert InsufficientBond();
         Record storage r = records[recordIndex];
         if (r.state != RecordState.Provisional) revert NothingToFinalize();
         r.state = RecordState.Disputed;
-        relayUnderReview[r.relay] = true;
+        relayActiveDisputes[r.relay] += 1;
         disputeId = _openDispute(0, recordIndex, 0);
     }
 
@@ -370,12 +408,15 @@ contract AccountableRelay {
         Batch storage b = batches[batchIndex];
         if (b.state != RecordState.Provisional) revert NothingToFinalize();
         if (leafIndex >= b.leafCount) revert BadMerkleProof();
+        LeafState ls = batchLeafState[batchIndex][leafIndex];
+        if (ls == LeafState.Disputed || ls == LeafState.Revoked) revert LeafNotDisputable();
 
         bytes32 leaf = _leafHash(batchIndex, didHash, nonce, dataHash, sigHash);
         if (!_verifyProof(leaf, merkleProof, leafIndex, b.merkleRoot)) revert BadMerkleProof();
 
-        b.state = RecordState.Disputed;
-        relayUnderReview[b.relay] = true;
+        batchLeafState[batchIndex][leafIndex] = LeafState.Disputed;
+        batchOpenLeafDisputes[batchIndex] += 1;
+        relayActiveDisputes[b.relay] += 1;
         disputeId = _openDispute(1, batchIndex, leafIndex);
     }
 
@@ -394,22 +435,21 @@ contract AccountableRelay {
     }
 
     /**
-     * @notice Submit a committee attestation for an open dispute.
-     *         The signature must come from a staked verifier and authorize
-     *         keccak256(ATTEST_DOMAIN, disputeId, verdictIsFraud, target binding).
+     * @notice Submit a committee attestation for an open dispute. The
+     *         signature must come from a registered, staked verifier that
+     *         is not the target's endorsing relay (conflict of interest).
      */
-    function submitAttestation(uint256 disputeId, bool verdictIsFraud, bytes calldata signature) external {
+    function submitAttestation(uint256 disputeId, bool verdictIsFraud, bytes calldata signature) external nonReentrant {
         Dispute storage d = disputes[disputeId];
         if (d.deadline == 0) revert UnknownDispute();
         if (d.resolved || block.timestamp > d.deadline) revert NoDisputeOpen();
 
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19Ethereum Signed Message:\n32", _attestInner(disputeId, verdictIsFraud))
-        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", _attestInner(disputeId, verdictIsFraud)));
         address signer = _recover(digest, signature);
-        if (verifierStake[signer] < verifierStakeAmount) revert NotVerifier();
-        if (hasAttested[disputeId][signer]) revert DuplicateAttestation();
-        hasAttested[disputeId][signer] = true;
+        if (!isRegisteredVerifier[signer] || verifierStake[signer] < verifierStakeAmount) revert NotRegisteredVerifier();
+        if (signer == _targetRelay(d)) revert ConflictOfInterest();
+        if (_hasAttested[disputeId][signer]) revert DuplicateAttestation();
+        _hasAttested[disputeId][signer] = true;
 
         if (verdictIsFraud) {
             d.fraudAttesters.push(signer);
@@ -418,89 +458,155 @@ contract AccountableRelay {
         }
 
         if (d.fraudAttesters.length >= quorum) {
-            _resolve(disputeId, true);
+            _resolveFraud(disputeId);
         } else if (d.validAttesters.length >= quorum) {
-            _resolve(disputeId, false);
+            _resolveSpurious(disputeId);
         }
     }
 
     /**
      * @notice Fail-closed expiry: a dispute that reaches its deadline
-     *         without a quorum revokes the target and refunds bonds.
+     *         without a quorum revokes the target, refunds half the
+     *         challenger bond, and burns the remainder (retained by the
+     *         contract), so disputing honest records has a real cost.
      */
-    function expireDispute(uint256 disputeId) external {
+    function expireDispute(uint256 disputeId) external nonReentrant {
         Dispute storage d = disputes[disputeId];
         if (d.deadline == 0) revert UnknownDispute();
         if (d.resolved) revert DisputeNotResolved();
         if (block.timestamp <= d.deadline) revert ChallengeWindowOpen();
-        _revokeTarget(d);
-        _refundChallenger(d);
+
         d.resolved = true;
-        emit DisputeResolved(disputeId, true);
+        _revokeTarget(d);
+        _closeDispute(d);
+
+        // Half the bond is refunded; the rest is burned (retained).
+        address payable challenger = payable(d.challenger);
+        uint256 refund = d.bond / 2;
+        (bool ok, ) = challenger.call{value: refund}("");
+        require(ok, "refund failed");
+
+        emit DisputeExpired(disputeId);
     }
 
     // ------------------------------------------------------------------
-    // Resolution and slashing
+    // Resolution, rewards, and slashing
     // ------------------------------------------------------------------
-    function _resolve(uint256 disputeId, bool fraudProven) internal {
+
+    function _targetRelay(Dispute storage d) internal view returns (address) {
+        return d.targetType == 0 ? records[d.targetIndex].relay : batches[d.targetIndex].relay;
+    }
+
+    function _targetKey(Dispute storage d) internal view returns (bytes32) {
+        return keccak256(abi.encodePacked(d.targetType, d.targetIndex, d.leafIndex));
+    }
+
+    /**
+     * @dev Fraud proven: revoke the target, slash the relay (60% challenger
+     *      bounty, 40% shared by the fraud attesters), refund the
+     *      challenger, and slash EVERY verifier that ever attested "valid"
+     *      on this target across all of its disputes.
+     */
+    function _resolveFraud(uint256 disputeId) internal {
+        Dispute storage d = disputes[disputeId];
+        d.resolved = true;
+        _revokeTarget(d);
+        _closeDispute(d);
+
+        // Register this dispute's valid attesters, then slash all wrong-side
+        // verifiers ever recorded for the target.
+        bytes32 key = _targetKey(d);
+        for (uint256 i = 0; i < d.validAttesters.length; i++) {
+            _registerValidAtt(key, d.validAttesters[i]);
+        }
+        address payable challenger = payable(d.challenger);
+        address[] storage wrongSide = _targetValidList[key];
+        for (uint256 i = 0; i < wrongSide.length; i++) {
+            _slashFromPool(wrongSide[i], verifierSlashAmount, challenger, true);
+        }
+
+        _slashFromPool(
+            _targetRelay(d), relaySlashAmount * 3 / 5, challenger, false // challenger bounty: 60%
+        );
+        _payAttesters(d.fraudAttesters, relaySlashAmount * 2 / 5); // attester pool: 40%
+
+        (bool ok, ) = challenger.call{value: d.bond}("");
+        require(ok, "refund failed");
+
+        emit DisputeResolved(disputeId, true);
+    }
+
+    /**
+     * @dev Spurious dispute: the target returns to the UNDECIDED state (the
+     *      challenge window is not bypassed and the dispute can be reopened
+     *      with new evidence). The bond compensates the relay (50%) and the
+     *      attesters who showed up (50%). The valid attesters are registered
+     *      and remain slashable if fraud is ever proven for this target.
+     */
+    function _resolveSpurious(uint256 disputeId) internal {
         Dispute storage d = disputes[disputeId];
         d.resolved = true;
 
-        if (fraudProven) {
-            // Slash the RELAY pool (fraudulent endorsement), bounty the
-            // challenger, then slash wrong-side verifiers from their pool.
-            address payable challenger = payable(d.challenger);
-            _slashFromPool(
-                d.targetType == 0 ? records[d.targetIndex].relay : batches[d.targetIndex].relay,
-                relaySlashAmount,
-                challenger,
-                false
-            );
-            _refundChallenger(d);
-            address[] storage wrongSide = d.validAttesters;
-            for (uint256 i = 0; i < wrongSide.length; i++) {
-                _slashFromPool(wrongSide[i], verifierSlashAmount, challenger, true);
-            }
-            _revokeTarget(d);
+        if (d.targetType == 0) {
+            records[d.targetIndex].state = RecordState.Provisional; // NOT Confirmed
         } else {
-            // Spurious dispute: the challenger bond compensates the relay.
-            address payable relay = payable(d.targetType == 0 ? records[d.targetIndex].relay : batches[d.targetIndex].relay);
-            (bool ok, ) = relay.call{value: d.bond}("");
-            require(ok, "bond transfer failed");
-            address[] storage wrongSide = d.fraudAttesters;
-            for (uint256 i = 0; i < wrongSide.length; i++) {
-                _slashFromPool(wrongSide[i], verifierSlashAmount, relay, true);
-            }
-            if (d.targetType == 0) {
-                records[d.targetIndex].state = RecordState.Confirmed;
-            } else {
-                batches[d.targetIndex].state = RecordState.Confirmed;
-            }
+            batchLeafState[d.targetIndex][d.leafIndex] = LeafState.Upheld; // disputable again
         }
-        _clearReviewFlag(d);
-        emit DisputeResolved(disputeId, fraudProven);
+        _closeDispute(d);
+
+        // Register valid attesters for future cross-dispute slashing.
+        bytes32 key = _targetKey(d);
+        for (uint256 i = 0; i < d.validAttesters.length; i++) {
+            _registerValidAtt(key, d.validAttesters[i]);
+        }
+
+        address payable relay = payable(_targetRelay(d));
+        _payAttesters(d.validAttesters, d.bond / 2); // attester reward: 50% of bond
+        (bool ok, ) = relay.call{value: d.bond - d.bond / 2}(""); // relay compensation: 50%
+        require(ok, "bond transfer failed");
+
+        emit DisputeResolved(disputeId, false);
     }
 
     function _revokeTarget(Dispute storage d) internal {
         if (d.targetType == 0) {
             records[d.targetIndex].state = RecordState.Revoked;
         } else {
-            batches[d.targetIndex].state = RecordState.Revoked;
+            if (batchLeafState[d.targetIndex][d.leafIndex] != LeafState.Revoked) {
+                batchLeafState[d.targetIndex][d.leafIndex] = LeafState.Revoked;
+                batches[d.targetIndex].revokedLeafCount += 1;
+                emit LeafRevoked(d.targetIndex, d.leafIndex);
+            }
         }
     }
 
-    function _refundChallenger(Dispute storage d) internal {
-        address payable challenger = payable(d.challenger);
-        (bool ok, ) = challenger.call{value: d.bond}("");
-        require(ok, "refund failed");
+    function _closeDispute(Dispute storage d) internal {
+        relayActiveDisputes[_targetRelay(d)] -= 1;
+        if (d.targetType == 1) {
+            batchOpenLeafDisputes[d.targetIndex] -= 1;
+        }
+    }
+
+    function _registerValidAtt(bytes32 key, address v) internal {
+        if (!_targetValidHas[key][v]) {
+            _targetValidHas[key][v] = true;
+            _targetValidList[key].push(v);
+        }
+    }
+
+    function _payAttesters(address[] storage attesters, uint256 total) internal {
+        if (attesters.length == 0 || total == 0) return;
+        uint256 share = total / attesters.length;
+        for (uint256 i = 0; i < attesters.length; i++) {
+            (bool ok, ) = attesters[i].call{value: share}("");
+            require(ok, "attester payout failed");
+        }
     }
 
     /**
-     * @dev Slash `amount` from the specified stake pool of `from` (relay
-     *      pool when `fromVerifierPool` is false, verifier pool otherwise)
-     *      and pay it out to `to`. If the primary pool is short, the
-     *      remainder is taken from the other pool so that value is never
-     *      left ambiguous.
+     * @dev Slash `amount` from the specified stake pool of `from` and pay it
+     *      to `to`; if the primary pool is short, the remainder is taken
+     *      from the other pool.
      */
     function _slashFromPool(address from, uint256 amount, address payable to, bool fromVerifierPool) internal {
         uint256 payout;
@@ -508,7 +614,7 @@ contract AccountableRelay {
             uint256 vStake = verifierStake[from];
             uint256 take = vStake < amount ? vStake : amount;
             verifierStake[from] = vStake - take;
-            amount -= take;
+            unchecked { amount -= take; }
             payout += take;
             if (amount > 0) {
                 uint256 rStake = relayStake[from];
@@ -520,7 +626,7 @@ contract AccountableRelay {
             uint256 rStake = relayStake[from];
             uint256 take = rStake < amount ? rStake : amount;
             relayStake[from] = rStake - take;
-            amount -= take;
+            unchecked { amount -= take; }
             payout += take;
             if (amount > 0) {
                 uint256 vStake = verifierStake[from];
@@ -533,11 +639,6 @@ contract AccountableRelay {
             (bool ok, ) = to.call{value: payout}("");
             require(ok, "slash payout failed");
         }
-    }
-
-    function _clearReviewFlag(Dispute storage d) internal {
-        address relay = d.targetType == 0 ? records[d.targetIndex].relay : batches[d.targetIndex].relay;
-        relayUnderReview[relay] = false;
     }
 
     // ------------------------------------------------------------------
@@ -570,18 +671,23 @@ contract AccountableRelay {
         )
     {
         Record storage r = records[index];
-        return (
-            r.dataHash, r.didHash, r.falconSignature, r.pubKeyHash, r.submittedAt, r.relay, r.nonce, r.state
-        );
+        return (r.dataHash, r.didHash, r.falconSignature, r.pubKeyHash, r.submittedAt, r.relay, r.nonce, r.state);
     }
 
     function getBatch(uint256 batchIndex)
         external
         view
-        returns (bytes32 merkleRoot, uint256 leafCount, bytes32 availabilityCommitment, address relay, RecordState state)
+        returns (
+            bytes32 merkleRoot,
+            uint256 leafCount,
+            bytes32 availabilityCommitment,
+            address relay,
+            uint256 revokedLeafCount,
+            RecordState state
+        )
     {
         Batch storage b = batches[batchIndex];
-        return (b.merkleRoot, b.leafCount, b.availabilityCommitment, b.relay, b.state);
+        return (b.merkleRoot, b.leafCount, b.availabilityCommitment, b.relay, b.revokedLeafCount, b.state);
     }
 
     function getDispute(uint256 disputeId)
@@ -596,6 +702,32 @@ contract AccountableRelay {
     // ------------------------------------------------------------------
     // Cryptographic helpers
     // ------------------------------------------------------------------
+    function _attestInner(uint256 disputeId, bool verdictIsFraud) internal view returns (bytes32) {
+        Dispute storage d = disputes[disputeId];
+        return keccak256(
+            abi.encode("ATTEST_DOMAIN_V1", disputeId, verdictIsFraud, d.targetType, d.targetIndex, d.leafIndex)
+        );
+    }
+
+    /**
+     * @notice The domain-separated digest that a committee verifier signs
+     *         with a standard personal_sign (EIP-191) operation.
+     */
+    function computeAttestDigest(uint256 disputeId, bool verdictIsFraud) external view returns (bytes32) {
+        return _attestInner(disputeId, verdictIsFraud);
+    }
+
+    function _recover(bytes32 digest, bytes calldata signature) internal pure returns (address) {
+        if (signature.length != 65) revert BadAttestation();
+        bytes32 r = bytes32(signature[0:32]);
+        bytes32 s = bytes32(signature[32:64]);
+        uint8 v = uint8(signature[64]);
+        if (v < 27) v += 27;
+        address signer = ecrecover(digest, v, r, s);
+        if (signer == address(0)) revert BadAttestation();
+        return signer;
+    }
+
     function _processLeaf(
         uint256 batchIndex,
         uint256 i,
@@ -623,34 +755,6 @@ contract AccountableRelay {
         return keccak256(
             abi.encode("BATCH_LEAF_DOMAIN_V1", block.chainid, address(this), batchIndex, didHash, nonce, dataHash, sigHash)
         );
-    }
-
-    function _attestInner(uint256 disputeId, bool verdictIsFraud) internal view returns (bytes32) {
-        Dispute storage d = disputes[disputeId];
-        return keccak256(
-            abi.encode("ATTEST_DOMAIN_V1", disputeId, verdictIsFraud, d.targetType, d.targetIndex, d.leafIndex)
-        );
-    }
-
-    /**
-     * @notice The domain-separated digest that a committee verifier signs
-     *         with a standard personal_sign (EIP-191) operation. The
-     *         contract re-applies the EIP-191 prefix on-chain when
-     *         recovering the signer.
-     */
-    function computeAttestDigest(uint256 disputeId, bool verdictIsFraud) external view returns (bytes32) {
-        return _attestInner(disputeId, verdictIsFraud);
-    }
-
-    function _recover(bytes32 digest, bytes calldata signature) internal pure returns (address) {
-        if (signature.length != 65) revert BadAttestation();
-        bytes32 r = bytes32(signature[0:32]);
-        bytes32 s = bytes32(signature[32:64]);
-        uint8 v = uint8(signature[64]);
-        if (v < 27) v += 27;
-        address signer = ecrecover(digest, v, r, s);
-        if (signer == address(0)) revert BadAttestation();
-        return signer;
     }
 
     // ------------------------------------------------------------------

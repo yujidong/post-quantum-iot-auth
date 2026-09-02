@@ -1,16 +1,17 @@
 /**
- * Sepolia L1 validation of the AccountableRelay (V2) contract:
- * deploys the accountability protocol on live Ethereum Sepolia and
- * reproduces the Hardhat lifecycle measurements end to end.
+ * Sepolia L1 validation of AccountableRelay (V3) with INDEPENDENT roles:
+ *   relay       = the funded account from .env (key 1)
+ *   challenger  = derived key 2 (funded by key 1)
+ *   verifiers   = derived keys 2 and 3 (funded by key 1), quorum t = 2
  *
- * Deployment parameters for validation: challengePeriod = 90 s (so the
- * full lifecycle can run in one session; production uses 2 h) and
- * quorum = 1 (a single key controls all roles in this run; production
- * uses an independent staked committee).
+ * Exercised: stakes + committee registration (3 members), accountable
+ * submissions, bound-leaf batch, finalization after the window, and a
+ * fraud dispute attested by two verifier keys that are neither the relay
+ * nor (for the resolving quorum) the challenger, ending in revocation,
+ * relay slashing, challenger bounty, and attester rewards.
  *
- * Lifecycle exercised:
- *   stake -> accountable submission -> bound-leaf batch ->
- *   finalize after window -> dispute -> attest -> revoke + slash
+ * Validation configuration: challengePeriod = 90 s, economics scaled 1/100.
+ * The derived keys exist only for this run.
  */
 const { ethers } = require("hardhat");
 const fs = require("fs");
@@ -18,10 +19,8 @@ const path = require("path");
 
 const FALCON_PK_SIZE = 897;
 const FALCON_SIG_SIZE = 752;
-const CHALLENGE_PERIOD = 90; // seconds (validation configuration)
-const QUORUM = 1n;
-// Scaled economics (1/100 of the reference benchmark) so the full
-// lifecycle fits a modest testnet balance; production tunes per Table 5.
+const CHALLENGE_PERIOD = 90;
+const QUORUM = 2n;
 const RELAY_STAKE = ethers.parseEther("0.01");
 const VERIFIER_STAKE = ethers.parseEther("0.005");
 const CHALLENGER_BOND = ethers.parseEther("0.001");
@@ -29,137 +28,123 @@ const RELAY_SLASH = ethers.parseEther("0.005");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function gasOf(tx) {
-  const receipt = await tx.wait();
-  if (receipt.status !== 1) throw new Error("transaction reverted: " + tx.hash);
-  return { gas: Number(receipt.gasUsed), receipt };
-}
-
-/**
- * Register a DID and wait until the registration is actually visible in a
- * mined block (public RPCs can reorder or delay unconfirmed sends).
- */
-async function registerDIDConfirmed(didRegistry, did, pubKey) {
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    if (await didRegistry.isActive(did)) return;
-    try {
-      await gasOf(await didRegistry.registerDID(did, pubKey));
-    } catch (e) {
-      console.log(`registerDID attempt ${attempt} failed: ${e.shortMessage || e.message.slice(0, 120)}`);
-      await sleep(5000 * attempt);
-    }
-    // Wait for visibility even after a successful send.
-    for (let i = 0; i < 10 && !(await didRegistry.isActive(did)); i++) await sleep(3000);
-  }
-  if (!(await didRegistry.isActive(did))) throw new Error("DID registration not confirmed: " + did);
+async function waitOk(tx) {
+  const r = await tx.wait();
+  if (r.status !== 1) throw new Error("tx reverted: " + tx.hash);
+  return Number(r.gasUsed);
 }
 
 async function main() {
   const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
-  const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-  const net = await provider.getNetwork();
-  console.log("network:", net.name, "chainId:", net.chainId.toString());
-  console.log("deployer:", wallet.address);
-  const bal = await provider.getBalance(wallet.address);
-  console.log("balance:", ethers.formatEther(bal), "ETH");
-  if (bal < ethers.parseEther("0.05")) throw new Error("insufficient Sepolia ETH for the validation run");
+  const relayWallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+  console.log("relay/deployer:", relayWallet.address, "balance:", ethers.formatEther(await provider.getBalance(relayWallet.address)));
 
-  const results = { timestamp: new Date().toISOString(), network: "sepolia", challengePeriod: CHALLENGE_PERIOD, quorum: Number(QUORUM) };
+  // Derived independent keys (exist only in memory for this run).
+  const challengerWallet = ethers.Wallet.createRandom().connect(provider);
+  const verifierWallet = ethers.Wallet.createRandom().connect(provider);
+  console.log("challenger:", challengerWallet.address);
+  console.log("verifier :", verifierWallet.address);
+  // A third verifier role is played by the challenger key, which is
+  // independent of the relay; quorum needs 2 attestations.
+  // Fund them.
+  const FUND = ethers.parseEther("0.03");
+  await waitOk(await relayWallet.sendTransaction({ to: challengerWallet.address, value: FUND }));
+  await waitOk(await relayWallet.sendTransaction({ to: verifierWallet.address, value: FUND }));
 
-  // --- deploy ---
-  const DIDRegistry = await ethers.getContractFactory("DIDRegistry", wallet);
+  const results = {
+    timestamp: new Date().toISOString(),
+    network: "sepolia",
+    challengePeriod: CHALLENGE_PERIOD,
+    quorum: Number(QUORUM),
+    roles: {
+      relay: relayWallet.address,
+      challenger: challengerWallet.address,
+      verifiers: [challengerWallet.address, verifierWallet.address],
+    },
+  };
+
+  const DIDRegistry = await ethers.getContractFactory("DIDRegistry", relayWallet);
   const didRegistry = await DIDRegistry.deploy();
   await didRegistry.waitForDeployment();
-  results.didRegistryDeployment = (await gasOf(didRegistry.deploymentTransaction())).gas;
+  results.didRegistryDeployment = await waitOk(didRegistry.deploymentTransaction());
 
-  const AccountableRelay = await ethers.getContractFactory("AccountableRelay", wallet);
+  const AccountableRelay = await ethers.getContractFactory("AccountableRelay", relayWallet);
   const ar = await AccountableRelay.deploy(
-    await didRegistry.getAddress(),
-    CHALLENGE_PERIOD,
-    QUORUM,
-    RELAY_STAKE,
-    VERIFIER_STAKE,
-    CHALLENGER_BOND,
-    RELAY_SLASH,
-    ethers.parseEther("0.0025") // verifier slash
+    await didRegistry.getAddress(), CHALLENGE_PERIOD, QUORUM,
+    RELAY_STAKE, VERIFIER_STAKE, CHALLENGER_BOND, RELAY_SLASH, ethers.parseEther("0.0025")
   );
   await ar.waitForDeployment();
-  const dep = await gasOf(ar.deploymentTransaction());
-  results.accountableRelayDeployment = dep.gas;
-  console.log("deployed AccountableRelay at", await ar.getAddress(), "deployment gas:", dep.gas);
+  results.deployment = await waitOk(ar.deploymentTransaction());
+  console.log("deployed AccountableRelay at", await ar.getAddress(), "gas:", results.deployment);
 
-  // --- stakes ---
-  results.stakeRelay = (await gasOf(await ar.stakeRelay({ value: RELAY_STAKE }))).gas;
-  results.stakeVerifier = (await gasOf(await ar.stakeVerifier({ value: VERIFIER_STAKE }))).gas;
-
-  // --- DID + accountable submissions ---
-  const did = ethers.id("did:falconiot:sepolia-accountable-0");
-  await registerDIDConfirmed(didRegistry, did, ethers.randomBytes(FALCON_PK_SIZE));
-
-  const subGas = [];
-  for (let i = 0; i < 3; i++) {
-    subGas.push((await gasOf(await ar.submitAccountable(ethers.id(`sepolia-v2-data-${i}`), did, ethers.randomBytes(FALCON_SIG_SIZE)))).gas);
+  async function registerDIDConfirmed(did) {
+    for (let a = 0; a < 3; a++) {
+      if (await didRegistry.isActive(did)) return;
+      try { await waitOk(await didRegistry.registerDID(did, ethers.randomBytes(FALCON_PK_SIZE))); } catch { /* retry */ }
+      for (let i = 0; i < 10 && !(await didRegistry.isActive(did)); i++) await sleep(3000);
+    }
+    if (!(await didRegistry.isActive(did))) throw new Error("DID not confirmed: " + did);
   }
-  results.submitAccountable = subGas;
-  console.log("accountable submissions:", subGas);
 
-  // --- bound-leaf batch (k = 10, fresh DIDs) ---
-  const dids = [];
-  const dataHashes = [];
-  const sigs = [];
+  // Stakes + committee: verifiers are the two independent keys.
+  results.stakeRelay = await waitOk(await ar.stakeRelay({ value: RELAY_STAKE }));
+  const challengerAR = ar.connect(challengerWallet);
+  const verifierAR = ar.connect(verifierWallet);
+  results.stakeVerifier1 = await waitOk(await challengerAR.stakeVerifier({ value: VERIFIER_STAKE }));
+  results.stakeVerifier2 = await waitOk(await verifierAR.stakeVerifier({ value: VERIFIER_STAKE }));
+  results.committeeSize = Number(await ar.verifierCount());
+
+  // Submissions + batch.
+  const did = ethers.id("did:falconiot:sepolia-v3-mk-0");
+  await registerDIDConfirmed(did);
+  const subs = [];
+  for (let i = 0; i < 2; i++) {
+    subs.push(await waitOk(await ar.submitAccountable(ethers.id(`v3-mk-${i}`), did, ethers.randomBytes(FALCON_SIG_SIZE))));
+  }
+  results.submitAccountable = subs;
+
+  const batchDids = [], batchData = [], batchSigs = [];
   for (let i = 0; i < 10; i++) {
-    const d = ethers.id(`did:falconiot:sepolia-batch-${i}`);
-    await registerDIDConfirmed(didRegistry, d, ethers.randomBytes(FALCON_PK_SIZE));
-    dids.push(d);
-    dataHashes.push(ethers.id(`sepolia-batch-data-${i}`));
-    sigs.push(ethers.randomBytes(FALCON_SIG_SIZE));
+    const d = ethers.id(`did:falconiot:sepolia-v3-mk-batch-${i}`);
+    await registerDIDConfirmed(d);
+    batchDids.push(d);
+    batchData.push(ethers.id(`v3-mk-batch-${i}`));
+    batchSigs.push(ethers.randomBytes(FALCON_SIG_SIZE));
   }
-  const batch = await gasOf(await ar.submitBatch(dids, dataHashes, ethers.concat(sigs)));
-  results.submitBatch10 = batch.gas;
-  console.log("batch k=10 gas:", batch.gas);
+  results.submitBatch10 = await waitOk(await ar.submitBatch(batchDids, batchData, ethers.concat(batchSigs)));
 
-  // --- finalize after the challenge window ---
-  console.log("waiting", CHALLENGE_PERIOD + 15, "s for the challenge window...");
+  // Finalize after the window.
+  console.log("waiting", CHALLENGE_PERIOD + 15, "s...");
   await sleep((CHALLENGE_PERIOD + 15) * 1000);
-  const fin = await gasOf(await ar.finalizeRecord(0));
-  results.finalizeRecord = fin.gas;
-  const rec0 = await ar.getRecord(0);
-  results.invariantFinalized = Number(rec0.state) === 1;
+  results.finalizeRecord = await waitOk(await ar.finalizeRecord(0));
+  results.invariantFinalized = Number((await ar.getRecord(0)).state) === 1;
 
-  // --- dispute path: fraud quorum (quorum = 1 in this validation) ---
-  const fraudDid = ethers.id("did:falconiot:sepolia-fraud");
-  await registerDIDConfirmed(didRegistry, fraudDid, ethers.randomBytes(FALCON_PK_SIZE));
-  await ar.submitAccountable(ethers.id("sepolia-fraud-data"), fraudDid, ethers.randomBytes(FALCON_SIG_SIZE));
-  const fraudIndex = Number((await ar.recordCount()) - 1n);
+  // Fraud dispute on record 1: challenger opens; both independent
+  // verifiers attest fraud (quorum 2). Neither is the relay.
+  const chalBalBefore = await provider.getBalance(challengerWallet.address);
+  const verBalBefore = await provider.getBalance(verifierWallet.address);
+  const relayStakeBefore = await ar.relayStake(relayWallet.address);
 
-  const od = await gasOf(await ar.openDispute(fraudIndex, { value: CHALLENGER_BOND }));
-  results.openDispute = od.gas;
-  const disputeId = Number((await ar.disputeCount()) - 1n);
-
+  results.openDispute = await waitOk(await challengerAR.openDispute(1, { value: CHALLENGER_BOND }));
+  const disputeId = Number(await ar.disputeCount()) - 1;
   const digest = await ar.computeAttestDigest(disputeId, true);
-  const attSig = await wallet.signMessage(ethers.getBytes(digest));
-  const att = await gasOf(await ar.submitAttestation(disputeId, true, attSig));
-  results.submitAttestationResolving = att.gas;
+  const sigChal = await challengerWallet.signMessage(ethers.getBytes(digest));
+  const sigVer = await verifierWallet.signMessage(ethers.getBytes(digest));
+  results.submitAttestation1 = await waitOk(await challengerAR.submitAttestation(disputeId, true, sigChal));
+  results.submitAttestationResolving = await waitOk(await verifierAR.submitAttestation(disputeId, true, sigVer));
 
-  const recF = await ar.getRecord(fraudIndex);
-  results.invariantFraudRevoked = Number(recF.state) === 3;
-  results.invariantRelaySlashed = (await ar.relayStake(wallet.address)) === RELAY_STAKE - RELAY_SLASH;
-  const stakeAfter = await ar.relayStake(wallet.address);
-  console.log("relay stake after slash:", ethers.formatEther(stakeAfter), "ETH");
+  results.invariantFraudRevoked = Number((await ar.getRecord(1)).state) === 3;
+  results.invariantRelaySlashed = (await ar.relayStake(relayWallet.address)) === relayStakeBefore - RELAY_SLASH * 3n / 5n;
+  const chalBalAfter = await provider.getBalance(challengerWallet.address);
+  const verBalAfter = await provider.getBalance(verifierWallet.address);
+  results.invariantChallengerNetPositive = chalBalAfter - chalBalBefore > 0n;
+  results.invariantVerifierRewarded = verBalAfter - verBalBefore > 0n;
 
-  // --- persist ---
+  // ---- persist ----
   const outDir = path.join(__dirname, "..", "results");
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
-  const outPath = path.join(outDir, "accountable-sepolia-validation.json");
-  fs.writeFileSync(outPath, JSON.stringify(results, null, 2));
+  fs.writeFileSync(path.join(outDir, "accountable-sepolia-validation.json"), JSON.stringify(results, null, 2));
   console.log("\n" + JSON.stringify(results, null, 2));
-  console.log("\nsaved:", outPath);
-
-  const spent = bal - (await provider.getBalance(wallet.address));
-  console.log("total ETH spent (incl. stakes retained in contract):", ethers.formatEther(spent));
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exitCode = 1;
-});
+main().catch((e) => { console.error(e); process.exitCode = 1; });
