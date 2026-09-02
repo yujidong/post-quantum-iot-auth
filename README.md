@@ -8,7 +8,7 @@ Direct on-chain verification of lattice-based signatures exceeds current block g
 
 - **IoT devices** sign transactions with Falcon-512
 - **Edge gateways** perform lightweight verification and DID resolution
-- **Relay nodes** construct ECDSA-signed meta-transactions for EVM compatibility
+- **Relay nodes** construct ECDSA-signed meta-transactions for EVM compatibility, under stake and with attributable, contestable endorsements (`AccountableRelay`)
 - **Smart contracts** record authentication artifacts and enforce DID-key binding
 
 The architecture and experimental results are reported in the companion paper (under review). Smart-contract gas costs and 500-device scalability have been validated on the Ethereum Sepolia L1 and Base Sepolia L2 testnets; see `results/testnet-validation-summary.md` for the cross-environment comparison.
@@ -25,7 +25,8 @@ The architecture and experimental results are reported in the companion paper (u
 ├── smart-contracts/          # Solidity contracts (Hardhat project)
 │   ├── contracts/
 │   │   ├── DIDRegistry.sol       # DID registration and public key anchoring
-│   │   ├── MetaTxRelay.sol       # Relay-assisted meta-transaction processing
+│   │   ├── MetaTxRelay.sol       # Relay-assisted meta-transaction processing (V1 baseline)
+│   │   ├── AccountableRelay.sol  # Staked relays + optimistic verification (V2)
 │   │   └── ECDSAVerify.sol       # ECDSA signature verification helper
 │   ├── test/                     # Contract test suite (Chai + Ethers.js)
 │   ├── scripts/
@@ -172,6 +173,24 @@ The `DIDRegistry` contract maps decentralized identifiers to Falcon-512 public k
 
 ### Meta-Transaction Relay
 The `MetaTxRelay` contract processes relay-submitted transactions that carry Falcon signatures and DID references. The relay signs with ECDSA for EVM compatibility, while the Falcon signature is stored on-chain for auditability without being verified on-chain.
+
+### Accountable Relaying and Optimistic Verification (`AccountableRelay`)
+The V2 contract closes the trust gap of conventional meta-transaction relays, in which the ledger trusts a single quantum-vulnerable ECDSA relay key:
+
+- **Staked, attributable relays** — every on-chain record names its endorsing relay; submissions require a stake and consume an on-chain-assigned per-DID nonce inside a domain-separated commitment binding (identity, nonce, payload, signature).
+- **Optimistic verification** — records land in the `Provisional` state and are finalized by anyone after a challenge window; during the window any watchdog can open a dispute backed by a bond.
+- **Committee adjudication with slashing** — staked verifiers re-run Falcon verification off-chain and submit signed attestations; confirmed fraud revokes the record and slashes the relay, spurious disputes compensate the relay from the challenger's bond, and undecided disputes fail closed.
+- **Bound-leaf batching** — batch submissions carry the raw signatures as calldata; the contract assigns nonces, hashes each signature slice, builds the Merkle tree over (DID, nonce, payload hash, signature hash) leaves itself, and stores only the root and availability commitment.
+
+Measured overhead (Hardhat, optimizer 200 runs, see `results/accountability/`): accountable submission 839,927 gas vs 821,555 for the V1 baseline (+2.2%); finalization 49,397; full fraud-dispute path ~456k; batch amortization 60,294 / 48,591 / 47,465 gas per transaction at k = 10 / 50 / 100. The complete lifecycle, including dispute resolution and slashing, has been executed end to end on Ethereum Sepolia (gas within 0.01% of Hardhat; see `results/accountability/accountable-sepolia-validation.json`).
+
+```bash
+# Hardhat benchmark + correctness invariants (14 checks)
+cd smart-contracts && npx hardhat run scripts/accountable-gas-report.js
+
+# Full lifecycle on Sepolia L1 (deploy, stake, submit, batch, finalize, dispute, slash)
+npx hardhat run scripts/sepolia-accountable-validate.js --network sepolia
+```
 
 ## Testing
 

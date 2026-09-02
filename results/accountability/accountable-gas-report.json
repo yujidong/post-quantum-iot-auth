@@ -1,0 +1,75 @@
+{
+  "deployment": 2887424,
+  "stakeRelay": 45037,
+  "stakeVerifier": {
+    "n": 3,
+    "mean": 45025,
+    "stdDev": 0,
+    "min": 45025,
+    "max": 45025
+  },
+  "v1BaselineSubmit": {
+    "n": 10,
+    "mean": 821555,
+    "stdDev": 10262,
+    "min": 818106,
+    "max": 852342
+  },
+  "v2SubmitAccountable": {
+    "n": 10,
+    "mean": 839927,
+    "stdDev": 5127,
+    "min": 838159,
+    "max": 855307
+  },
+  "accountabilityOverhead": {
+    "delta": 18372,
+    "percent": 2.236247116748118
+  },
+  "invariantInactiveDidRejected": true,
+  "invariantNotStakedRejected": true,
+  "finalizeRecord": {
+    "n": 10,
+    "mean": 49397,
+    "stdDev": 4,
+    "min": 49386,
+    "max": 49398
+  },
+  "invariantFinalizedState": true,
+  "invariantEarlyFinalizeRejected": true,
+  "openDispute": 188637,
+  "submitAttestation": 112533,
+  "submitAttestationResolving": 154806,
+  "invariantFraudRevoked": true,
+  "invariantRelaySlashed": true,
+  "invariantSpuriousConfirmed": true,
+  "invariantBondPaidToRelay": true,
+  "invariantNonVerifierAttestationRejected": true,
+  "invariantDuplicateAttestationRejected": true,
+  "expireDispute": 74968,
+  "invariantFailClosedRevoked": true,
+  "batch": [
+    {
+      "k": 10,
+      "batchGas": 602940,
+      "perTxGas": 60294,
+      "rootMatches": true
+    },
+    {
+      "k": 50,
+      "batchGas": 2429567,
+      "perTxGas": 48591,
+      "rootMatches": true
+    },
+    {
+      "k": 100,
+      "batchGas": 4746497,
+      "perTxGas": 47465,
+      "rootMatches": true
+    }
+  ],
+  "invariantBatchRootMatches": true,
+  "invariantBadMerkleProofRejected": true,
+  "openBatchLeafDispute": 184187,
+  "invariantBatchDisputed": true
+}

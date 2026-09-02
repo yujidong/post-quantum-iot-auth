@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-09-02T12:42:08.864Z",
+  "network": "sepolia",
+  "challengePeriod": 90,
+  "quorum": 1,
+  "didRegistryDeployment": 538822,
+  "accountableRelayDeployment": 2887400,
+  "stakeRelay": 45037,
+  "stakeVerifier": 45025,
+  "submitAccountable": [
+    855331,
+    821083,
+    821131
+  ],
+  "submitBatch10": 602928,
+  "finalizeRecord": 49386,
+  "invariantFinalized": true,
+  "openDispute": 188637,
+  "submitAttestationResolving": 169406,
+  "invariantFraudRevoked": true,
+  "invariantRelaySlashed": true
+}
