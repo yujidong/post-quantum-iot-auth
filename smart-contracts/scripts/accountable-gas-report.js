@@ -148,9 +148,6 @@ async function main() {
   results.invariantNotStakedRejected = notStakedRejected;
 
   // --- I3: fraud path (record 0) ---
-  const chalBefore = await ethers.provider.getBalance(challenger.address);
-  const verABefore = await ethers.provider.getBalance(verA.address);
-  const verBBefore = await ethers.provider.getBalance(verB.address);
   const relayStakeBefore = await ar.relayStake(relay.address);
 
   const odTx = await ar.connect(challenger).openDispute(0, { value: ONE / 10n });
@@ -166,24 +163,19 @@ async function main() {
 
   const rec0 = await ar.getRecord(0);
   results.invariantFraudRevoked = Number(rec0.state) === 3;
-  const chalAfter = await ethers.provider.getBalance(challenger.address);
-  const verAAfter = await ethers.provider.getBalance(verA.address);
-  const verBAfter = await ethers.provider.getBalance(verB.address);
-  // Challenger gains: 60% slash bounty (0.3) + bond refund (0.1); gas excluded
-  // by comparing balances around the resolution receipt only would be noisy,
-  // so assert on stake + attester rewards and challenger delta bounds.
+  // Pull payments: nothing moves at resolution; everything is credited.
   results.invariantRelaySlashed = (await ar.relayStake(relay.address)) === relayStakeBefore - ONE * 3n / 10n;
   results.invariantFraudAttesterReward =
-    verAAfter - verABefore > ethers.parseEther('0.099') && verAAfter - verABefore < ONE / 10n &&
-    verBAfter - verBBefore > ethers.parseEther('0.099') && verBAfter - verBBefore < ONE / 10n; // 40% of 0.5 split by 2, minus gas
-  results.invariantChallengerPaid =
-    chalAfter - chalBefore > ethers.parseEther('0.299') && chalAfter - chalBefore <= ONE * 3n / 10n; // bounty minus gas (bond round-trips)
+    (await ar.pendingWithdrawals(verA.address)) === ONE / 10n &&
+    (await ar.pendingWithdrawals(verB.address)) === ONE / 10n; // 40% of 0.5 split by 2
+  results.invariantChallengerCredited =
+    (await ar.pendingWithdrawals(challenger.address)) === ONE * 3n / 10n + ONE / 10n; // bounty + refund
 
   // Top the slashed relay back up for later scenarios.
   await ar.connect(relay).stakeRelay({ value: ONE * 3n / 10n });
 
   // --- I4: spurious path (record 1) ---
-  const relayBalBefore = await ethers.provider.getBalance(relay.address);
+  const relayPendingBefore = await ar.pendingWithdrawals(relay.address);
   await ar.connect(challenger).openDispute(1, { value: ONE / 10n });
   const digest1V = await attestDigestOf(ar, 1, false);
   const sigAV = await verA.signMessage(ethers.getBytes(digest1V));
@@ -194,13 +186,17 @@ async function main() {
   );
   const rec1 = await ar.getRecord(1);
   results.invariantSpuriousReturnsProvisional = Number(rec1.state) === 0; // NOT Confirmed
-  const relayBalAfter = await ethers.provider.getBalance(relay.address);
-  results.invariantSpuriousBondToRelay = relayBalAfter - relayBalBefore === ONE / 20n; // 50% of 0.1
+  results.invariantSpuriousBondToRelay =
+    (await ar.pendingWithdrawals(relay.address)) - relayPendingBefore === ONE / 20n; // 50% of 0.1
+  results.invariantSpuriousAttesterReward =
+    (await ar.pendingWithdrawals(verA.address)) === ONE / 10n + ONE / 40n &&
+    (await ar.pendingWithdrawals(verB.address)) === ONE / 10n + ONE / 40n; // prior + 0.05/2 each
 
   // --- I5: re-dispute the same record, fraud now proven -> cross-dispute slashing ---
-  const verABal2 = await ethers.provider.getBalance(verA.address);
-  const verBStake2 = await ar.verifierStake(verB.address);
   const verAStake2 = await ar.verifierStake(verA.address);
+  const verBStake2 = await ar.verifierStake(verB.address);
+  const verAPending2 = await ar.pendingWithdrawals(verA.address);
+  const chalPending2 = await ar.pendingWithdrawals(challenger.address);
   await ar.connect(challenger).openDispute(1, { value: ONE / 10n }); // dispute 2, same record
   const digest2F = await attestDigestOf(ar, 2, true);
   const sigCF = await verC.signMessage(ethers.getBytes(digest2F));
@@ -220,16 +216,19 @@ async function main() {
   results.invariantRedisputedFraudRevoked = Number(rec1b.state) === 3;
   // verA and verB attested "valid" in dispute 1 -> both slashed 0.25 each.
   // verA attested fraud here (reward 40%/2 = 0.1 to each of verC, verA).
-  const verABal3 = await ethers.provider.getBalance(verA.address);
   const verBStake3 = await ar.verifierStake(verB.address);
   const verAStake3 = await ar.verifierStake(verA.address);
-  // Slashing burns STAKE (payout goes to the challenger); verB sent no tx,
-  // so its stake must drop by exactly the verifier slash.
+  // Slashing burns STAKE (payout is credited to the challenger); verB is only
+  // registered-and-slashed: stake drops by exactly the verifier slash.
   results.invariantCrossDisputeSlashedVerB = verBStake2 - verBStake3 === ONE / 4n;
-  // verA: stake also slashed 0.25; balance gains the attester reward minus gas.
+  // verA: stake also slashed 0.25; pending gains the attester reward.
   results.invariantCrossDisputeVerA =
     verAStake2 - verAStake3 === ONE / 4n &&
-    verABal3 - verABal2 > ethers.parseEther('0.099') && verABal3 - verABal2 < ONE / 10n;
+    (await ar.pendingWithdrawals(verA.address)) - verAPending2 === ONE / 10n;
+  // Challenger is credited the two registry slashes (0.25 x 2) + bounty + refund.
+  results.invariantCrossDisputeChallengerCredited =
+    (await ar.pendingWithdrawals(challenger.address)) - chalPending2 ===
+    ONE / 4n * 2n + ONE * 3n / 10n + ONE / 10n;
 
   // Slashing dropped verA/verB below the attestation threshold: they are
   // auto-ejected from the committee (stake-gated attestation). Re-stake to
@@ -247,7 +246,7 @@ async function main() {
   await ar.connect(relay).stakeRelay({ value: slash2 });
 
   // --- I6: fail-closed expiry (record 2 disputed, no quorum) ---
-  const chalBalE = await ethers.provider.getBalance(challenger.address);
+  const chalPendingE = await ar.pendingWithdrawals(challenger.address);
   await ar.connect(challenger).openDispute(2, { value: ONE / 10n });
   const activeDuring = await ar.relayActiveDisputes(relay.address);
   await network.provider.send("evm_increaseTime", [CHALLENGE_PERIOD + 60]);
@@ -257,18 +256,13 @@ async function main() {
   const rec2 = await ar.getRecord(2);
   results.invariantFailClosedRevoked = Number(rec2.state) === 3;
   results.invariantActiveDisputesDecrement = Number(activeDuring) === 1 && Number(await ar.relayActiveDisputes(relay.address)) === 0;
-  const chalBalE2 = await ethers.provider.getBalance(challenger.address);
-  // Half refunded (0.05) minus the gas the challenger paid to open:
-  const expiryLost = chalBalE - chalBalE2; // = half bond burned + gas
-  results.invariantExpiryPartialRefund = expiryLost > ONE / 20n && expiryLost < ethers.parseEther('0.06');
+  // Half the bond is credited (claimable), half is burned in-contract.
+  results.invariantExpiryPartialRefund =
+    (await ar.pendingWithdrawals(challenger.address)) - chalPendingE === ONE / 20n;
 
   // Close out the remaining open dispute (dispute 2 target already revoked... 
   // dispute 2 was resolved; dispute 3 expired. Clean the last one if any.)
   // (No open dispute remains: 0,1,2 resolved, 3 expired.)
-  results.invariantNoOpenDisputes = Number(await ar.relayActiveDisputes(relay.address)) === 1;
-  // ^ one dispute (dispute 3) was closed by expireDispute; the earlier count
-  //   decrement expectations are asserted above. The final open count should
-  //   be zero -- verify:
   results.invariantNoOpenDisputes = Number(await ar.relayActiveDisputes(relay.address)) === 0;
 
   // --- finalize remaining records after the window ---
@@ -303,6 +297,31 @@ async function main() {
   let dupRejected = false;
   try { await ar.connect(verA).submitAttestation(4, true, sigAF4); } catch { dupRejected = true; }
   results.invariantDuplicateAttestationRejected = dupRejected;
+
+  // --- pull-payment withdrawal (challenger claims all credits) ---
+  const chalBalW = await ethers.provider.getBalance(challenger.address);
+  const chalPendingTotal = await ar.pendingWithdrawals(challenger.address);
+  const wTx = await ar.connect(challenger).withdraw();
+  results.withdraw = Number((await wTx.wait()).gasUsed);
+  const chalBalW2 = await ethers.provider.getBalance(challenger.address);
+  results.invariantWithdrawPaysAll =
+    (await ar.pendingWithdrawals(challenger.address)) === 0n &&
+    chalPendingTotal > ONE; // bounty + refunds + registry slashes accumulated
+
+  // --- verifier committee exit: deregister -> announce -> delay -> unstake ---
+  const rosterBefore = Number(await ar.verifierCount());
+  await ar.connect(verC).deregisterVerifier();
+  results.invariantDeregisterDecrements = Number(await ar.verifierCount()) === rosterBefore - 1;
+  await ar.connect(verC).announceVerifierUnstake();
+  await network.provider.send('evm_increaseTime', [3 * 86400 + 3600]);
+  await network.provider.send('evm_mine');
+  const verCPendingBefore = await ar.pendingWithdrawals(verC.address);
+  await ar.connect(verC).unstakeVerifier();
+  results.invariantVerifierExitCreditsStake =
+    (await ar.pendingWithdrawals(verC.address)) - verCPendingBefore === ONE / 2n;
+  await ar.connect(verC).withdraw();
+  results.invariantVerifierExitWithdraws =
+    (await ar.pendingWithdrawals(verC.address)) === 0n;
 
   // --- batches: k = 10 / 50 / 100 + I9/I10 ---
   const batchResults = [];

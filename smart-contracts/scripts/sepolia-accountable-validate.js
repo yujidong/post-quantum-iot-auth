@@ -39,17 +39,18 @@ async function main() {
   const relayWallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
   console.log("relay/deployer:", relayWallet.address, "balance:", ethers.formatEther(await provider.getBalance(relayWallet.address)));
 
-  // Derived independent keys (exist only in memory for this run).
+  // Three fully independent derived keys: challenger and two committee
+  // verifiers. No key plays two roles; the relay key plays none besides relay.
   const challengerWallet = ethers.Wallet.createRandom().connect(provider);
-  const verifierWallet = ethers.Wallet.createRandom().connect(provider);
+  const verifierAWallet = ethers.Wallet.createRandom().connect(provider);
+  const verifierBWallet = ethers.Wallet.createRandom().connect(provider);
   console.log("challenger:", challengerWallet.address);
-  console.log("verifier :", verifierWallet.address);
-  // A third verifier role is played by the challenger key, which is
-  // independent of the relay; quorum needs 2 attestations.
-  // Fund them.
+  console.log("verifier A:", verifierAWallet.address);
+  console.log("verifier B:", verifierBWallet.address);
   const FUND = ethers.parseEther("0.03");
   await waitOk(await relayWallet.sendTransaction({ to: challengerWallet.address, value: FUND }));
-  await waitOk(await relayWallet.sendTransaction({ to: verifierWallet.address, value: FUND }));
+  await waitOk(await relayWallet.sendTransaction({ to: verifierAWallet.address, value: FUND }));
+  await waitOk(await relayWallet.sendTransaction({ to: verifierBWallet.address, value: FUND }));
 
   const results = {
     timestamp: new Date().toISOString(),
@@ -59,7 +60,7 @@ async function main() {
     roles: {
       relay: relayWallet.address,
       challenger: challengerWallet.address,
-      verifiers: [challengerWallet.address, verifierWallet.address],
+      verifiers: [verifierAWallet.address, verifierBWallet.address],
     },
   };
 
@@ -89,9 +90,10 @@ async function main() {
   // Stakes + committee: verifiers are the two independent keys.
   results.stakeRelay = await waitOk(await ar.stakeRelay({ value: RELAY_STAKE }));
   const challengerAR = ar.connect(challengerWallet);
-  const verifierAR = ar.connect(verifierWallet);
-  results.stakeVerifier1 = await waitOk(await challengerAR.stakeVerifier({ value: VERIFIER_STAKE }));
-  results.stakeVerifier2 = await waitOk(await verifierAR.stakeVerifier({ value: VERIFIER_STAKE }));
+  const verifierAAR = ar.connect(verifierAWallet);
+  const verifierBAR = ar.connect(verifierBWallet);
+  results.stakeVerifier1 = await waitOk(await verifierAAR.stakeVerifier({ value: VERIFIER_STAKE }));
+  results.stakeVerifier2 = await waitOk(await verifierBAR.stakeVerifier({ value: VERIFIER_STAKE }));
   results.committeeSize = Number(await ar.verifierCount());
 
   // Submissions + batch.
@@ -121,24 +123,27 @@ async function main() {
 
   // Fraud dispute on record 1: challenger opens; both independent
   // verifiers attest fraud (quorum 2). Neither is the relay.
-  const chalBalBefore = await provider.getBalance(challengerWallet.address);
-  const verBalBefore = await provider.getBalance(verifierWallet.address);
   const relayStakeBefore = await ar.relayStake(relayWallet.address);
 
   results.openDispute = await waitOk(await challengerAR.openDispute(1, { value: CHALLENGER_BOND }));
   const disputeId = Number(await ar.disputeCount()) - 1;
   const digest = await ar.computeAttestDigest(disputeId, true);
-  const sigChal = await challengerWallet.signMessage(ethers.getBytes(digest));
-  const sigVer = await verifierWallet.signMessage(ethers.getBytes(digest));
-  results.submitAttestation1 = await waitOk(await challengerAR.submitAttestation(disputeId, true, sigChal));
-  results.submitAttestationResolving = await waitOk(await verifierAR.submitAttestation(disputeId, true, sigVer));
+  const sigA = await verifierAWallet.signMessage(ethers.getBytes(digest));
+  const sigB = await verifierBWallet.signMessage(ethers.getBytes(digest));
+  results.submitAttestation1 = await waitOk(await verifierAAR.submitAttestation(disputeId, true, sigA));
+  results.submitAttestationResolving = await waitOk(await verifierBAR.submitAttestation(disputeId, true, sigB));
 
   results.invariantFraudRevoked = Number((await ar.getRecord(1)).state) === 3;
   results.invariantRelaySlashed = (await ar.relayStake(relayWallet.address)) === relayStakeBefore - RELAY_SLASH * 3n / 5n;
-  const chalBalAfter = await provider.getBalance(challengerWallet.address);
-  const verBalAfter = await provider.getBalance(verifierWallet.address);
-  results.invariantChallengerNetPositive = chalBalAfter - chalBalBefore > 0n;
-  results.invariantVerifierRewarded = verBalAfter - verBalBefore > 0n;
+  // Pull payments: credits are claimable via withdraw().
+  results.invariantChallengerCredited =
+    (await ar.pendingWithdrawals(challengerWallet.address)) === RELAY_SLASH * 3n / 5n + CHALLENGER_BOND;
+  results.invariantVerifierCredited =
+    (await ar.pendingWithdrawals(verifierAWallet.address)) === RELAY_SLASH * 2n / 5n / 2n &&
+    (await ar.pendingWithdrawals(verifierBWallet.address)) === RELAY_SLASH * 2n / 5n / 2n;
+  const wTx = await challengerAR.withdraw();
+  results.withdraw = Number((await wTx.wait()).gasUsed);
+  results.invariantWithdrawPaysAll = (await ar.pendingWithdrawals(challengerWallet.address)) === 0n;
 
   // ---- persist ----
   const outDir = path.join(__dirname, "..", "results");

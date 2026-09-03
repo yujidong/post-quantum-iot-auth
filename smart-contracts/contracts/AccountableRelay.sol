@@ -65,7 +65,8 @@ contract AccountableRelay {
     error NothingToFinalize();
     error ChallengeWindowOpen();
     error NoDisputeOpen();
-    error DisputeNotResolved();
+    error AlreadyResolved();
+    error NothingToWithdraw();
     error BadMerkleProof();
     error UnknownDispute();
     error StillStaked();
@@ -170,6 +171,11 @@ contract AccountableRelay {
 
     mapping(uint256 => mapping(address => bool)) private _hasAttested;
 
+    // Pull-payment ledger: all resolution payouts, refunds, and unstakes are
+    // credited here and claimed via withdraw(), so no resolution can be
+    // blocked by a recipient contract whose fallback reverts.
+    mapping(address => uint256) public pendingWithdrawals;
+
     uint256 private _guard = 1;
 
     // ------------------------------------------------------------------
@@ -198,6 +204,8 @@ contract AccountableRelay {
     event DisputeResolved(uint256 indexed disputeId, bool fraudProven);
     event DisputeExpired(uint256 indexed disputeId);
     event LeafRevoked(uint256 indexed batchIndex, uint256 indexed leafIndex);
+    event VerifierDeregistered(address indexed verifier);
+    event Withdrawn(address indexed account, uint256 amount);
 
     modifier nonReentrant() {
         if (_guard != 1) revert Reentrant();
@@ -251,8 +259,7 @@ contract AccountableRelay {
         if (relayExitTime[msg.sender] == 0 || block.timestamp < relayExitTime[msg.sender]) revert StillStaked();
         relayStake[msg.sender] = 0;
         relayExitTime[msg.sender] = 0;
-        (bool ok, ) = msg.sender.call{value: amount}("");
-        require(ok, "unstake transfer failed");
+        _credit(msg.sender, amount);
         emit RelayUnstaked(msg.sender, amount);
     }
 
@@ -275,15 +282,31 @@ contract AccountableRelay {
     function unstakeVerifier() external nonReentrant {
         uint256 amount = verifierStake[msg.sender];
         if (amount == 0) revert NotVerifier();
+        if (isRegisteredVerifier[msg.sender]) revert StillStaked(); // deregister first
         if (verifierExitTime[msg.sender] == 0 || block.timestamp < verifierExitTime[msg.sender]) revert StillStaked();
-        if (isRegisteredVerifier[msg.sender] && verifierStake[msg.sender] >= verifierStakeAmount) {
-            revert StillStaked(); // must drop below threshold first via slashing, or lower stake
-        }
         verifierStake[msg.sender] = 0;
         verifierExitTime[msg.sender] = 0;
-        (bool ok, ) = msg.sender.call{value: amount}("");
-        require(ok, "unstake transfer failed");
+        _credit(msg.sender, amount);
         emit VerifierUnstaked(msg.sender, amount);
+    }
+
+    /**
+     * @notice Leave the committee roster. Required before unstaking; the
+     *         delayed unstake still applies afterwards.
+     */
+    function deregisterVerifier() external {
+        if (!isRegisteredVerifier[msg.sender]) revert NotRegisteredVerifier();
+        isRegisteredVerifier[msg.sender] = false;
+        uint256 n = _verifierRoster.length;
+        for (uint256 i = 0; i < n; i++) {
+            if (_verifierRoster[i] == msg.sender) {
+                _verifierRoster[i] = _verifierRoster[n - 1];
+                _verifierRoster.pop();
+                verifierCount -= 1;
+                break;
+            }
+        }
+        emit VerifierDeregistered(msg.sender);
     }
 
     function verifierRoster(uint256 i) external view returns (address) {
@@ -473,18 +496,16 @@ contract AccountableRelay {
     function expireDispute(uint256 disputeId) external nonReentrant {
         Dispute storage d = disputes[disputeId];
         if (d.deadline == 0) revert UnknownDispute();
-        if (d.resolved) revert DisputeNotResolved();
+        if (d.resolved) revert AlreadyResolved();
         if (block.timestamp <= d.deadline) revert ChallengeWindowOpen();
 
         d.resolved = true;
         _revokeTarget(d);
         _closeDispute(d);
 
-        // Half the bond is refunded; the rest is burned (retained).
-        address payable challenger = payable(d.challenger);
-        uint256 refund = d.bond / 2;
-        (bool ok, ) = challenger.call{value: refund}("");
-        require(ok, "refund failed");
+        // Half the bond is refunded (claimable); the rest is burned
+        // (retained by the contract).
+        _credit(d.challenger, d.bond / 2);
 
         emit DisputeExpired(disputeId);
     }
@@ -530,8 +551,7 @@ contract AccountableRelay {
         );
         _payAttesters(d.fraudAttesters, relaySlashAmount * 2 / 5); // attester pool: 40%
 
-        (bool ok, ) = challenger.call{value: d.bond}("");
-        require(ok, "refund failed");
+        _credit(d.challenger, d.bond);
 
         emit DisputeResolved(disputeId, true);
     }
@@ -560,10 +580,8 @@ contract AccountableRelay {
             _registerValidAtt(key, d.validAttesters[i]);
         }
 
-        address payable relay = payable(_targetRelay(d));
         _payAttesters(d.validAttesters, d.bond / 2); // attester reward: 50% of bond
-        (bool ok, ) = relay.call{value: d.bond - d.bond / 2}(""); // relay compensation: 50%
-        require(ok, "bond transfer failed");
+        _credit(_targetRelay(d), d.bond - d.bond / 2); // relay compensation: 50%
 
         emit DisputeResolved(disputeId, false);
     }
@@ -598,8 +616,7 @@ contract AccountableRelay {
         if (attesters.length == 0 || total == 0) return;
         uint256 share = total / attesters.length;
         for (uint256 i = 0; i < attesters.length; i++) {
-            (bool ok, ) = attesters[i].call{value: share}("");
-            require(ok, "attester payout failed");
+            _credit(attesters[i], share);
         }
     }
 
@@ -636,9 +653,27 @@ contract AccountableRelay {
             }
         }
         if (payout > 0) {
-            (bool ok, ) = to.call{value: payout}("");
-            require(ok, "slash payout failed");
+            _credit(to, payout);
         }
+    }
+
+    /**
+     * @dev Credit a pull-payment. Funds never move during dispute resolution.
+     */
+    function _credit(address to, uint256 amount) internal {
+        if (amount > 0) pendingWithdrawals[to] += amount;
+    }
+
+    /**
+     * @notice Claim all credited payouts, refunds, and unstaked balances.
+     */
+    function withdraw() external nonReentrant {
+        uint256 amount = pendingWithdrawals[msg.sender];
+        if (amount == 0) revert NothingToWithdraw();
+        pendingWithdrawals[msg.sender] = 0;
+        (bool ok, ) = msg.sender.call{value: amount}("");
+        require(ok, "withdraw transfer failed");
+        emit Withdrawn(msg.sender, amount);
     }
 
     // ------------------------------------------------------------------
