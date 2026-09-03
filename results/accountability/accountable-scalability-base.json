@@ -1,0 +1,66 @@
+{
+  "timestamp": "2026-09-02T16:42:47.638Z",
+  "network": "base-sepolia",
+  "configs": [
+    {
+      "devices": 10,
+      "confirmed": 10,
+      "failed": 0,
+      "regWallMs": 29608,
+      "submitWallMs": 29039,
+      "totalWallS": 58.647,
+      "avgSubmitGas": 816885,
+      "avgRegGas": 771534
+    },
+    {
+      "devices": 50,
+      "confirmed": 50,
+      "failed": 0,
+      "regWallMs": 145007,
+      "submitWallMs": 151734,
+      "totalWallS": 296.741,
+      "avgSubmitGas": 815167,
+      "avgRegGas": 771529
+    },
+    {
+      "devices": 100,
+      "confirmed": 100,
+      "failed": 0,
+      "regWallMs": 294556,
+      "submitWallMs": 289200,
+      "totalWallS": 583.756,
+      "avgSubmitGas": 815166,
+      "avgRegGas": 771531
+    },
+    {
+      "devices": 200,
+      "confirmed": 200,
+      "failed": 0,
+      "regWallMs": 604761,
+      "submitWallMs": 598430,
+      "totalWallS": 1203.191,
+      "avgSubmitGas": 815165,
+      "avgRegGas": 771331
+    },
+    {
+      "devices": 500,
+      "confirmed": 500,
+      "failed": 0,
+      "regWallMs": 1539360,
+      "submitWallMs": 1482123,
+      "totalWallS": 3021.483,
+      "avgSubmitGas": 815165,
+      "avgRegGas": 771372
+    }
+  ],
+  "batched100": {
+    "devices": 100,
+    "batches": 10,
+    "batchSize": 10,
+    "submitWallMs": 35098,
+    "totalWallS": 326.594,
+    "avgBatchGas": 591836,
+    "perTxGas": 59183,
+    "confirmed": 10
+  }
+}
