@@ -176,6 +176,17 @@ contract AccountableRelay {
     // blocked by a recipient contract whose fallback reverts.
     mapping(address => uint256) public pendingWithdrawals;
 
+    // Live wrong-side exposure: incremented when a verifier's ``valid''
+    // attestation is registered on an un-finalized target, released when the
+    // target reaches a terminal state (finalized, revoked by fraud, or
+    // revoked by fail-closed expiry). A verifier with live exposure cannot
+    // leave the roster or announce an exit, making ``punishable until
+    // finalization'' a code guarantee rather than a timing assumption.
+    mapping(address => uint256) public verifierLiveExposures;
+    // Batch leaves whose dispute registries are non-empty (for release at
+    // batch finalization without iterating every leaf).
+    mapping(uint256 => uint256[]) private _exposedLeaves;
+
     uint256 private _guard = 1;
 
     // ------------------------------------------------------------------
@@ -276,6 +287,7 @@ contract AccountableRelay {
 
     function announceVerifierUnstake() external {
         if (verifierStake[msg.sender] == 0) revert NotVerifier();
+        if (verifierLiveExposures[msg.sender] != 0) revert ActiveDisputes();
         verifierExitTime[msg.sender] = block.timestamp + UNSTAKE_DELAY;
     }
 
@@ -296,6 +308,7 @@ contract AccountableRelay {
      */
     function deregisterVerifier() external {
         if (!isRegisteredVerifier[msg.sender]) revert NotRegisteredVerifier();
+        if (verifierLiveExposures[msg.sender] != 0) revert ActiveDisputes();
         isRegisteredVerifier[msg.sender] = false;
         uint256 n = _verifierRoster.length;
         for (uint256 i = 0; i < n; i++) {
@@ -358,6 +371,7 @@ contract AccountableRelay {
         if (r.state != RecordState.Provisional) revert NothingToFinalize();
         if (block.timestamp < r.submittedAt + challengePeriod) revert ChallengeWindowOpen();
         r.state = RecordState.Confirmed;
+        _releaseExposures(keccak256(abi.encodePacked(uint8(0), index, uint256(0))));
         emit RecordFinalized(index);
     }
 
@@ -403,6 +417,11 @@ contract AccountableRelay {
         if (block.timestamp < b.submittedAt + challengePeriod) revert ChallengeWindowOpen();
         if (batchOpenLeafDisputes[batchIndex] != 0) revert OpenLeafDisputes();
         b.state = RecordState.Confirmed;
+        uint256[] storage exposed = _exposedLeaves[batchIndex];
+        for (uint256 i = 0; i < exposed.length; i++) {
+            _releaseExposures(keccak256(abi.encodePacked(uint8(1), batchIndex, exposed[i])));
+        }
+        delete _exposedLeaves[batchIndex];
         emit BatchFinalized(batchIndex, b.revokedLeafCount);
     }
 
@@ -502,6 +521,7 @@ contract AccountableRelay {
         d.resolved = true;
         _revokeTarget(d);
         _closeDispute(d);
+        _releaseExposures(_targetKey(d)); // terminal: release wrong-side stakes
 
         // Half the bond is refunded (claimable); the rest is burned
         // (retained by the contract).
@@ -540,16 +560,21 @@ contract AccountableRelay {
         for (uint256 i = 0; i < d.validAttesters.length; i++) {
             _registerValidAtt(key, d.validAttesters[i]);
         }
+        if (d.targetType == 1) _rememberExposedLeaf(d.targetIndex, d.leafIndex);
         address payable challenger = payable(d.challenger);
         address[] storage wrongSide = _targetValidList[key];
         for (uint256 i = 0; i < wrongSide.length; i++) {
             _slashFromPool(wrongSide[i], verifierSlashAmount, challenger, true);
         }
+        _releaseExposures(key); // target is terminal: wrong-side stakes can no longer be slashed
 
-        _slashFromPool(
-            _targetRelay(d), relaySlashAmount * 3 / 5, challenger, false // challenger bounty: 60%
-        );
-        _payAttesters(d.fraudAttesters, relaySlashAmount * 2 / 5); // attester pool: 40%
+        // The FULL relay slash is deducted from the relay's stake first
+        // (with pool fallback), then split: 60% challenger bounty, 40%
+        // attester pool. Rounding dust is retained by the contract, so every
+        // credited wei is backed by a deducted wei (conservation).
+        uint256 collected = _collectFromPool(_targetRelay(d), relaySlashAmount, false);
+        _credit(challenger, collected * 3 / 5);
+        _payAttesters(d.fraudAttesters, collected * 2 / 5);
 
         _credit(d.challenger, d.bond);
 
@@ -579,6 +604,7 @@ contract AccountableRelay {
         for (uint256 i = 0; i < d.validAttesters.length; i++) {
             _registerValidAtt(key, d.validAttesters[i]);
         }
+        if (d.targetType == 1) _rememberExposedLeaf(d.targetIndex, d.leafIndex);
 
         _payAttesters(d.validAttesters, d.bond / 2); // attester reward: 50% of bond
         _credit(_targetRelay(d), d.bond - d.bond / 2); // relay compensation: 50%
@@ -609,7 +635,30 @@ contract AccountableRelay {
         if (!_targetValidHas[key][v]) {
             _targetValidHas[key][v] = true;
             _targetValidList[key].push(v);
+            verifierLiveExposures[v] += 1;
         }
+    }
+
+    /**
+     * @dev Release live-exposure counters for a target that reached a
+     *      terminal state (its wrong-side attestations can no longer be
+     *      slashed). Called from finalization, fraud resolution, and
+     *      fail-closed expiry.
+     */
+    function _releaseExposures(bytes32 key) internal {
+        address[] storage list = _targetValidList[key];
+        for (uint256 i = 0; i < list.length; i++) {
+            verifierLiveExposures[list[i]] -= 1;
+        }
+        delete _targetValidList[key]; // entries imply _targetValidHas; the outer map is never re-used for a released key
+    }
+
+    function _rememberExposedLeaf(uint256 batchIndex, uint256 leafIndex) internal {
+        uint256[] storage leaves = _exposedLeaves[batchIndex];
+        for (uint256 i = 0; i < leaves.length; i++) {
+            if (leaves[i] == leafIndex) return;
+        }
+        leaves.push(leafIndex);
     }
 
     function _payAttesters(address[] storage attesters, uint256 total) internal {
@@ -621,39 +670,47 @@ contract AccountableRelay {
     }
 
     /**
-     * @dev Slash `amount` from the specified stake pool of `from` and pay it
-     *      to `to`; if the primary pool is short, the remainder is taken
-     *      from the other pool.
+     * @dev Deduct `amount` from the specified stake pool of `from` (relay
+     *      pool when `fromVerifierPool` is false, verifier pool otherwise),
+     *      falling back to the other pool. Returns the amount actually
+     *      deducted (bounded by the available stakes).
      */
-    function _slashFromPool(address from, uint256 amount, address payable to, bool fromVerifierPool) internal {
-        uint256 payout;
+    function _collectFromPool(address from, uint256 amount, bool fromVerifierPool) internal returns (uint256 deducted) {
         if (fromVerifierPool) {
             uint256 vStake = verifierStake[from];
             uint256 take = vStake < amount ? vStake : amount;
             verifierStake[from] = vStake - take;
             unchecked { amount -= take; }
-            payout += take;
+            deducted += take;
             if (amount > 0) {
                 uint256 rStake = relayStake[from];
                 take = rStake < amount ? rStake : amount;
                 relayStake[from] = rStake - take;
-                payout += take;
+                deducted += take;
             }
         } else {
             uint256 rStake = relayStake[from];
             uint256 take = rStake < amount ? rStake : amount;
             relayStake[from] = rStake - take;
             unchecked { amount -= take; }
-            payout += take;
+            deducted += take;
             if (amount > 0) {
                 uint256 vStake = verifierStake[from];
                 take = vStake < amount ? vStake : amount;
                 verifierStake[from] = vStake - take;
-                payout += take;
+                deducted += take;
             }
         }
-        if (payout > 0) {
-            _credit(to, payout);
+    }
+
+    /**
+     * @dev Slash `amount` from the specified stake pool of `from` and credit
+     *      it to `to`; shortfalls fall through to the other pool.
+     */
+    function _slashFromPool(address from, uint256 amount, address payable to, bool fromVerifierPool) internal {
+        uint256 deducted = _collectFromPool(from, amount, fromVerifierPool);
+        if (deducted > 0) {
+            _credit(to, deducted);
         }
     }
 

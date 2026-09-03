@@ -1,14 +1,15 @@
 /**
- * Sepolia L1 validation of AccountableRelay (V3) with INDEPENDENT roles:
- *   relay       = the funded account from .env (key 1)
- *   challenger  = derived key 2 (funded by key 1)
- *   verifiers   = derived keys 2 and 3 (funded by key 1), quorum t = 2
+ * Sepolia L1 validation of AccountableRelay (v3.2) with fully independent
+ * roles: the funded deployment key acts solely as the staked relay, and
+ * three freshly derived, separately funded keys act as challenger and as
+ * the two committee verifiers (quorum q = 2 of a registered committee of
+ * two) --- four distinct addresses in total.
  *
- * Exercised: stakes + committee registration (3 members), accountable
- * submissions, bound-leaf batch, finalization after the window, and a
- * fraud dispute attested by two verifier keys that are neither the relay
- * nor (for the resolving quorum) the challenger, ending in revocation,
- * relay slashing, challenger bounty, and attester rewards.
+ * Exercised: stakes + committee registration, accountable submissions, a
+ * bound-leaf batch, finalization after the window, a fraud dispute attested
+ * by both independent verifier keys (revocation + FULL relay slash, split
+ * 60% challenger bounty / 40% attester pool, all funded by the deduction),
+ * and a pull-payment withdrawal paying out the challenger's credits.
  *
  * Validation configuration: challengePeriod = 90 s, economics scaled 1/100.
  * The derived keys exist only for this run.
@@ -134,7 +135,7 @@ async function main() {
   results.submitAttestationResolving = await waitOk(await verifierBAR.submitAttestation(disputeId, true, sigB));
 
   results.invariantFraudRevoked = Number((await ar.getRecord(1)).state) === 3;
-  results.invariantRelaySlashed = (await ar.relayStake(relayWallet.address)) === relayStakeBefore - RELAY_SLASH * 3n / 5n;
+  results.invariantRelaySlashed = (await ar.relayStake(relayWallet.address)) === relayStakeBefore - RELAY_SLASH; // FULL slash funds bounty + attester pool
   // Pull payments: credits are claimable via withdraw().
   results.invariantChallengerCredited =
     (await ar.pendingWithdrawals(challengerWallet.address)) === RELAY_SLASH * 3n / 5n + CHALLENGER_BOND;

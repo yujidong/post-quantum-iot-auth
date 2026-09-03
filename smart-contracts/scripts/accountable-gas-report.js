@@ -40,6 +40,20 @@ function summarize(values) {
   return { n, mean: Math.round(mean), stdDev: Math.round(Math.sqrt(variance)), min: Math.min(...values), max: Math.max(...values) };
 }
 
+// Global solvency check: the contract must hold at least the sum of all
+// tracked stakes plus credited (claimable) balances. Burned bonds and
+// rounding dust are retained surplus, so equality is not expected.
+async function solvencyOk(ar, provider, accounts) {
+  const balance = await provider.getBalance(await ar.getAddress());
+  let liabilities = 0n;
+  for (const a of accounts) {
+    liabilities += await ar.pendingWithdrawals(a);
+    liabilities += await ar.relayStake(a);
+    liabilities += await ar.verifierStake(a);
+  }
+  return { ok: balance >= liabilities, balance, liabilities };
+}
+
 // Mirrors AccountableRelay._buildTree (odd node promoted as its own sibling).
 function buildTreeWithProofs(leaves) {
   let level = leaves.slice();
@@ -164,7 +178,18 @@ async function main() {
   const rec0 = await ar.getRecord(0);
   results.invariantFraudRevoked = Number(rec0.state) === 3;
   // Pull payments: nothing moves at resolution; everything is credited.
-  results.invariantRelaySlashed = (await ar.relayStake(relay.address)) === relayStakeBefore - ONE * 3n / 10n;
+  // The FULL slash (0.5) leaves the relay stake: 0.3 challenger bounty +
+  // 0.2 attester pool, all funded by the deduction (conservation).
+  const arBalF0 = await ethers.provider.getBalance(await ar.getAddress());
+  results.invariantRelaySlashed = (await ar.relayStake(relay.address)) === relayStakeBefore - ONE / 2n;
+  const creditGain =
+    (await ar.pendingWithdrawals(challenger.address)) +
+    (await ar.pendingWithdrawals(verA.address)) +
+    (await ar.pendingWithdrawals(verB.address));
+  const arBalF1 = await ethers.provider.getBalance(await ar.getAddress());
+  results.invariantFraudConservation =
+    arBalF0 === arBalF1 && // resolution moves no ether
+    creditGain === ONE * 3n / 10n + ONE / 10n + ONE / 5n; // bounty + refund + attester pool
   results.invariantFraudAttesterReward =
     (await ar.pendingWithdrawals(verA.address)) === ONE / 10n &&
     (await ar.pendingWithdrawals(verB.address)) === ONE / 10n; // 40% of 0.5 split by 2
@@ -172,7 +197,7 @@ async function main() {
     (await ar.pendingWithdrawals(challenger.address)) === ONE * 3n / 10n + ONE / 10n; // bounty + refund
 
   // Top the slashed relay back up for later scenarios.
-  await ar.connect(relay).stakeRelay({ value: ONE * 3n / 10n });
+  await ar.connect(relay).stakeRelay({ value: ONE / 2n });
 
   // --- I4: spurious path (record 1) ---
   const relayPendingBefore = await ar.pendingWithdrawals(relay.address);
@@ -191,6 +216,11 @@ async function main() {
   results.invariantSpuriousAttesterReward =
     (await ar.pendingWithdrawals(verA.address)) === ONE / 10n + ONE / 40n &&
     (await ar.pendingWithdrawals(verB.address)) === ONE / 10n + ONE / 40n; // prior + 0.05/2 each
+  // M2: live exposure blocks committee exit while the target is unresolved.
+  results.invariantExposureBlocksDeregister = Number(await ar.verifierLiveExposures(verA.address)) === 1;
+  let deregBlocked = false;
+  try { await ar.connect(verA).deregisterVerifier.staticCall(); } catch { deregBlocked = true; }
+  results.invariantDeregisterRevertedWhileExposed = deregBlocked;
 
   // --- I5: re-dispute the same record, fraud now proven -> cross-dispute slashing ---
   const verAStake2 = await ar.verifierStake(verA.address);
@@ -214,6 +244,10 @@ async function main() {
 
   const rec1b = await ar.getRecord(1);
   results.invariantRedisputedFraudRevoked = Number(rec1b.state) === 3;
+  // M2: wrong-side exposure released at the terminal verdict.
+  results.invariantExposureReleased =
+    (await ar.verifierLiveExposures(verA.address)) === 0n &&
+    (await ar.verifierLiveExposures(verB.address)) === 0n;
   // verA and verB attested "valid" in dispute 1 -> both slashed 0.25 each.
   // verA attested fraud here (reward 40%/2 = 0.1 to each of verC, verA).
   const verBStake3 = await ar.verifierStake(verB.address);
@@ -242,8 +276,7 @@ async function main() {
   await ar.connect(verB).stakeVerifier({ value: ONE / 4n });
 
   // Top relay back up again.
-  const slash2 = ONE * 3n / 10n;
-  await ar.connect(relay).stakeRelay({ value: slash2 });
+  await ar.connect(relay).stakeRelay({ value: ONE / 2n });
 
   // --- I6: fail-closed expiry (record 2 disputed, no quorum) ---
   const chalPendingE = await ar.pendingWithdrawals(challenger.address);
@@ -322,6 +355,10 @@ async function main() {
   await ar.connect(verC).withdraw();
   results.invariantVerifierExitWithdraws =
     (await ar.pendingWithdrawals(verC.address)) === 0n;
+
+  // --- global solvency across every tracked account ---
+  const solv = await solvencyOk(ar, ethers.provider, [relay, challenger, verA, verB, verC].map((w) => w.address));
+  results.invariantSolvency = solv.ok;
 
   // --- batches: k = 10 / 50 / 100 + I9/I10 ---
   const batchResults = [];

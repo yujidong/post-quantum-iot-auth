@@ -1,5 +1,5 @@
 {
-  "deployment": 3389721,
+  "deployment": 3545416,
   "stakeRelay": 45025,
   "stakeVerifier": {
     "n": 3,
@@ -11,53 +11,57 @@
   "invariantCommitteeRegistered": true,
   "v1BaselineSubmit": {
     "n": 10,
-    "mean": 821564,
-    "stdDev": 10259,
+    "mean": 821567,
+    "stdDev": 10254,
     "min": 818130,
-    "max": 852342
+    "max": 852330
   },
   "v3SubmitAccountable": {
     "n": 10,
-    "mean": 816855,
-    "stdDev": 5141,
-    "min": 815095,
-    "max": 832279
+    "mean": 816877,
+    "stdDev": 5130,
+    "min": 815131,
+    "max": 832267
   },
   "accountabilityDelta": {
-    "delta": -4709,
-    "percent": -0.573175066093451
+    "delta": -4690,
+    "percent": -0.5708603193653105
   },
   "invariantInactiveDidRejected": true,
   "invariantNotStakedRejected": true,
   "openDispute": 168870,
-  "submitAttestation": 121835,
-  "submitAttestationResolvingFraud": 217834,
+  "submitAttestation": 121813,
+  "submitAttestationResolvingFraud": 218631,
   "invariantFraudRevoked": true,
   "invariantRelaySlashed": true,
+  "invariantFraudConservation": true,
   "invariantFraudAttesterReward": true,
   "invariantChallengerCredited": true,
-  "submitAttestationResolvingSpurious": 281569,
+  "submitAttestationResolvingSpurious": 326270,
   "invariantSpuriousReturnsProvisional": true,
   "invariantSpuriousBondToRelay": true,
   "invariantSpuriousAttesterReward": true,
+  "invariantExposureBlocksDeregister": true,
+  "invariantDeregisterRevertedWhileExposed": true,
   "invariantConflictOfInterestRejected": true,
-  "submitAttestationNonResolving": 121847,
+  "submitAttestationNonResolving": 121825,
   "invariantRedisputedFraudRevoked": true,
+  "invariantExposureReleased": true,
   "invariantCrossDisputeSlashedVerB": true,
   "invariantCrossDisputeVerA": true,
   "invariantCrossDisputeChallengerCredited": true,
   "invariantSlashedVerifierEjected": true,
-  "expireDispute": 76175,
+  "expireDispute": 81450,
   "invariantFailClosedRevoked": true,
   "invariantActiveDisputesDecrement": true,
   "invariantExpiryPartialRefund": true,
   "invariantNoOpenDisputes": true,
   "finalizeRecord": {
     "n": 7,
-    "mean": 49398,
+    "mean": 52307,
     "stdDev": 0,
-    "min": 49398,
-    "max": 49398
+    "min": 52307,
+    "max": 52307
   },
   "invariantFinalizedState": true,
   "invariantEarlyFinalizeRejected": true,
@@ -68,23 +72,24 @@
   "invariantDeregisterDecrements": true,
   "invariantVerifierExitCreditsStake": true,
   "invariantVerifierExitWithdraws": true,
+  "invariantSolvency": true,
   "batch": [
     {
       "k": 10,
-      "batchGas": 607242,
-      "perTxGas": 60724,
+      "batchGas": 607266,
+      "perTxGas": 60727,
       "rootMatches": true
     },
     {
       "k": 50,
-      "batchGas": 2433648,
-      "perTxGas": 48673,
+      "batchGas": 2433300,
+      "perTxGas": 48666,
       "rootMatches": true
     },
     {
       "k": 100,
-      "batchGas": 4750705,
-      "perTxGas": 47507,
+      "batchGas": 4750333,
+      "perTxGas": 47503,
       "rootMatches": true
     }
   ],
@@ -96,6 +101,6 @@
   "invariantLeaf6Upheld": true,
   "invariantBatchStillProvisional": true,
   "invariantEarlyBatchFinalizeRejected": true,
-  "finalizeBatch": 54090,
+  "finalizeBatch": 80022,
   "invariantBatchFinalizedWithRevocations": true
 }

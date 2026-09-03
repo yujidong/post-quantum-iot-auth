@@ -1,32 +1,32 @@
 {
-  "timestamp": "2026-09-03T04:53:27.324Z",
+  "timestamp": "2026-09-03T05:46:16.426Z",
   "network": "sepolia",
   "challengePeriod": 90,
   "quorum": 2,
   "roles": {
     "relay": "0x49556d7F15D92E68402d69046f2899a37b212589",
-    "challenger": "0xDcE20ea71583f4DE4785255e1DbB7a887aef9D85",
+    "challenger": "0x51D6d653A5aeA9dcD350fD5103d3e2E3E7A4d921",
     "verifiers": [
-      "0x43A931BdaaD9c4eC7acAE23E40BA3d3B9B41d502",
-      "0x84fF4282632D7FB23fE2c9E80811316E4278468a"
+      "0xb7cf298298e30242D28344071Df1B389B896aCc3",
+      "0xeD6E9837c8376276240bb274B74909445e60972D"
     ]
   },
   "didRegistryDeployment": 538822,
-  "deployment": 3389697,
+  "deployment": 3545392,
   "stakeRelay": 45025,
   "stakeVerifier1": 133767,
   "stakeVerifier2": 99567,
   "committeeSize": 2,
   "submitAccountable": [
-    832279,
-    798043
+    832243,
+    798079
   ],
-  "submitBatch10": 607398,
-  "finalizeRecord": 49386,
+  "submitBatch10": 607314,
+  "finalizeRecord": 52295,
   "invariantFinalized": true,
   "openDispute": 188782,
-  "submitAttestation1": 121835,
-  "submitAttestationResolving": 217834,
+  "submitAttestation1": 121813,
+  "submitAttestationResolving": 218631,
   "invariantFraudRevoked": true,
   "invariantRelaySlashed": true,
   "invariantChallengerCredited": true,
