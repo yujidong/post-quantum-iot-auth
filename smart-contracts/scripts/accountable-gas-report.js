@@ -356,6 +356,41 @@ async function main() {
   results.invariantVerifierExitWithdraws =
     (await ar.pendingWithdrawals(verC.address)) === 0n;
 
+  // --- M-b: unstake blocked at the final exit stage while exposure is live ---
+  // Attack path: announce exit while clean, then acquire wrong-side exposure
+  // via a spurious verdict, wait out the delay, and attempt to unstake.
+  {
+    await ar.connect(verC).stakeVerifier({ value: ONE / 2n }); // re-register
+    const didMB = ethers.id("did:falconiot:mb");
+    await didRegistry.connect(owner).registerDID(didMB, ethers.randomBytes(FALCON_PK_SIZE));
+    await ar.connect(relay).submitAccountable(ethers.id("mb-data"), didMB, ethers.randomBytes(FALCON_SIG_SIZE));
+    const mbIndex = Number(await ar.recordCount()) - 1;
+    await ar.connect(verC).announceVerifierUnstake(); // exit clock starts while clean
+    await ar.connect(challenger).openDispute(mbIndex, { value: ONE / 10n });
+    const dMB = Number(await ar.disputeCount()) - 1;
+    const dV = await attestDigestOf(ar, dMB, false);
+    await ar.connect(verC).submitAttestation(dMB, false, await verC.signMessage(ethers.getBytes(dV)));
+    await ar.connect(verA).submitAttestation(dMB, false, await verA.signMessage(ethers.getBytes(dV)));
+    results.invariantExposureAcquiredLate = Number(await ar.verifierLiveExposures(verC.address)) === 1;
+
+    await network.provider.send("evm_increaseTime", [3 * 86400 + 3600]);
+    await network.provider.send("evm_mine");
+    let unstakeBlocked = false;
+    try { await ar.connect(verC).unstakeVerifier.staticCall(); } catch { unstakeBlocked = true; }
+    results.invariantUnstakeRevertedWhileExposed = unstakeBlocked; // despite elapsed exit delay
+
+    // Finalize the target -> terminal -> exposure released -> deregister and
+    // unstake succeed (the announce from before the exposure still counts).
+    await ar.connect(challenger).finalizeRecord(mbIndex);
+    results.invariantLateExposureReleased = Number(await ar.verifierLiveExposures(verC.address)) === 0;
+    await ar.connect(verC).deregisterVerifier();
+    await ar.connect(verC).unstakeVerifier();
+    // Stake credit + the spurious-verdict attester reward (0.05 bond / 2).
+    results.invariantUnstakeSucceedsAfterRelease =
+      (await ar.pendingWithdrawals(verC.address)) === ONE / 2n + ONE / 40n;
+    await ar.connect(verC).withdraw();
+  }
+
   // --- global solvency across every tracked account ---
   const solv = await solvencyOk(ar, ethers.provider, [relay, challenger, verA, verB, verC].map((w) => w.address));
   results.invariantSolvency = solv.ok;

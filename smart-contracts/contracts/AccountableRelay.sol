@@ -295,6 +295,7 @@ contract AccountableRelay {
         uint256 amount = verifierStake[msg.sender];
         if (amount == 0) revert NotVerifier();
         if (isRegisteredVerifier[msg.sender]) revert StillStaked(); // deregister first
+        if (verifierLiveExposures[msg.sender] != 0) revert ActiveDisputes(); // exit blocked at every stage
         if (verifierExitTime[msg.sender] == 0 || block.timestamp < verifierExitTime[msg.sender]) revert StillStaked();
         verifierStake[msg.sender] = 0;
         verifierExitTime[msg.sender] = 0;

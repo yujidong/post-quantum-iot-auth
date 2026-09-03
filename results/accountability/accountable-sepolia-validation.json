@@ -1,27 +1,27 @@
 {
-  "timestamp": "2026-09-03T05:46:16.426Z",
+  "timestamp": "2026-09-03T08:11:28.793Z",
   "network": "sepolia",
   "challengePeriod": 90,
   "quorum": 2,
   "roles": {
     "relay": "0x49556d7F15D92E68402d69046f2899a37b212589",
-    "challenger": "0x51D6d653A5aeA9dcD350fD5103d3e2E3E7A4d921",
+    "challenger": "0xAc67c98db15d942a507Ab6ACdEcB4729fCA6d7d3",
     "verifiers": [
-      "0xb7cf298298e30242D28344071Df1B389B896aCc3",
-      "0xeD6E9837c8376276240bb274B74909445e60972D"
+      "0x2271a3AD1618f823897B9bd084406C5f2e95db48",
+      "0xC865Cb7C5a70789a565611eB6ea1392377CAf3De"
     ]
   },
   "didRegistryDeployment": 538822,
-  "deployment": 3545392,
+  "deployment": 3555372,
   "stakeRelay": 45025,
   "stakeVerifier1": 133767,
   "stakeVerifier2": 99567,
   "committeeSize": 2,
   "submitAccountable": [
-    832243,
-    798079
+    832267,
+    798067
   ],
-  "submitBatch10": 607314,
+  "submitBatch10": 607302,
   "finalizeRecord": 52295,
   "invariantFinalized": true,
   "openDispute": 188782,

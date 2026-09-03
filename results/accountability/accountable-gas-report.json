@@ -1,5 +1,5 @@
 {
-  "deployment": 3545416,
+  "deployment": 3555396,
   "stakeRelay": 45025,
   "stakeVerifier": {
     "n": 3,
@@ -11,21 +11,21 @@
   "invariantCommitteeRegistered": true,
   "v1BaselineSubmit": {
     "n": 10,
-    "mean": 821567,
-    "stdDev": 10254,
-    "min": 818130,
-    "max": 852330
+    "mean": 821568,
+    "stdDev": 10266,
+    "min": 818118,
+    "max": 852366
   },
   "v3SubmitAccountable": {
     "n": 10,
-    "mean": 816877,
-    "stdDev": 5130,
-    "min": 815131,
-    "max": 832267
+    "mean": 816860,
+    "stdDev": 5128,
+    "min": 815107,
+    "max": 832243
   },
   "accountabilityDelta": {
-    "delta": -4690,
-    "percent": -0.5708603193653105
+    "delta": -4708,
+    "percent": -0.573050556983719
   },
   "invariantInactiveDidRejected": true,
   "invariantNotStakedRejected": true,
@@ -72,24 +72,28 @@
   "invariantDeregisterDecrements": true,
   "invariantVerifierExitCreditsStake": true,
   "invariantVerifierExitWithdraws": true,
+  "invariantExposureAcquiredLate": true,
+  "invariantUnstakeRevertedWhileExposed": true,
+  "invariantLateExposureReleased": true,
+  "invariantUnstakeSucceedsAfterRelease": true,
   "invariantSolvency": true,
   "batch": [
     {
       "k": 10,
-      "batchGas": 607266,
-      "perTxGas": 60727,
+      "batchGas": 607314,
+      "perTxGas": 60731,
       "rootMatches": true
     },
     {
       "k": 50,
-      "batchGas": 2433300,
-      "perTxGas": 48666,
+      "batchGas": 2433852,
+      "perTxGas": 48677,
       "rootMatches": true
     },
     {
       "k": 100,
-      "batchGas": 4750333,
-      "perTxGas": 47503,
+      "batchGas": 4750477,
+      "perTxGas": 47505,
       "rootMatches": true
     }
   ],
